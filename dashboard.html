@@ -19,6 +19,15 @@
 <div class="status" id="healthStatus" role="status" aria-live="polite">Cloud status has not been checked yet.</div>
 </section>
 <section class="panel">
+<h2>Voice & AI tasks</h2>
+<p class="hint">Speak naturally or type a task. BOTROL Cloud plans a sequence using only commands supported by the ESP32 firmware.</p>
+<label class="field" for="taskText">Your task</label>
+<input id="taskText" maxlength="2000" placeholder="Open Notepad, then open Calculator">
+<div class="row"><button class="btn secondary" id="voiceButton" type="button">🎙 Speak</button><button class="btn" id="runTask" type="button">Plan & execute</button></div>
+<div class="status" id="taskStatus" role="status" aria-live="polite">Ready. Example: “Open Notepad, then open Calculator.”</div>
+<div class="notice">Voice recognition depends on browser support. AI provider credentials are configured on the cloud server, never in this page. Unsupported actions are rejected.</div>
+</section>
+<section class="panel">
 <h2>ESP32 connection</h2><div class="hint">Target device: <strong>BOTROL-ESP32-001</strong></div>
 <label class="field" for="adminToken">BOTROL admin token</label>
 <input id="adminToken" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Render BOTROL_ADMIN_TOKEN">
