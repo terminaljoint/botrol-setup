@@ -20,12 +20,12 @@
 </section>
 <section class="panel">
 <h2>Voice & AI tasks</h2>
-<p class="hint">Speak naturally or type a task. BOTROL Cloud plans a sequence using only commands supported by the ESP32 firmware.</p>
+<p class="hint">Speak naturally or type a task. BOTROL uses a built-in command parser. No AI account, API key, or external AI service is needed.</p>
 <label class="field" for="taskText">Your task</label>
 <input id="taskText" maxlength="2000" placeholder="Open Notepad, then open Calculator">
-<div class="row"><button class="btn secondary" id="voiceButton" type="button">🎙 Speak</button><button class="btn" id="runTask" type="button">Plan & execute</button></div>
+<div class="row"><button class="btn secondary" id="voiceButton" type="button">🎙 Speak</button><button class="btn" id="runTask" type="button">Run task</button></div>
 <div class="status" id="taskStatus" role="status" aria-live="polite">Ready. Example: “Open Notepad, then open Calculator.”</div>
-<div class="notice">Voice recognition depends on browser support. AI provider credentials are configured on the cloud server, never in this page. Unsupported actions are rejected.</div>
+<div class="notice">Voice recognition depends on browser support. No AI API is used. Only actions supported by the current ESP32 firmware are accepted.</div>
 </section>
 <section class="panel">
 <h2>ESP32 connection</h2><div class="hint">Target device: <strong>BOTROL-ESP32-001</strong></div>
@@ -88,14 +88,14 @@ async function executeTask(){
  const token=$("adminToken").value.trim(), transcript=$("taskText").value.trim(), button=$("runTask");
  if(!token){show($("taskStatus"),"Enter your BOTROL admin token in the ESP32 connection section first.","bad");return;}
  if(!transcript){show($("taskStatus"),"Speak or type a task first.","bad");return;}
- button.disabled=true;show($("taskStatus"),"BOTROL AI is creating a safe task plan...");
+ button.disabled=true;show($("taskStatus"),"BOTROL is parsing your task...");
  const headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"};
  try{
   const response=await fetch(API+"/api/v1/admin/tasks/execute",{method:"POST",headers,body:JSON.stringify({device_id:DEVICE,transcript})});
   const data=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error(data.detail||("HTTP "+response.status));
   const task=data.task;
-  show($("taskStatus"),"PLAN: "+task.summary+"\\n"+task.steps.map((s,i)=>(i+1)+". "+s.command+" · queued").join("\\n")+"\\n\\nWaiting for ESP32...");
+  show($("taskStatus"),"TASK: "+task.summary+"\\n"+task.steps.map((s,i)=>(i+1)+". "+s.command+" · queued").join("\\n")+"\\n\\nWaiting for ESP32...");
   const start=Date.now();
   while(Date.now()-start<90000){
    await wait(1500);
