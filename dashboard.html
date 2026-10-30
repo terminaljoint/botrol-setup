@@ -74,4 +74,42 @@ async function send(command,button){
 }
 $("sendPing").addEventListener("click",e=>send("ping",e.currentTarget));
 document.querySelectorAll("[data-command]").forEach(button=>button.addEventListener("click",e=>send(e.currentTarget.dataset.command,e.currentTarget)));
+
+async function executeTask(){
+ const token=$("adminToken").value.trim(), transcript=$("taskText").value.trim(), button=$("runTask");
+ if(!token){show($("taskStatus"),"Enter your BOTROL admin token in the ESP32 connection section first.","bad");return;}
+ if(!transcript){show($("taskStatus"),"Speak or type a task first.","bad");return;}
+ button.disabled=true;show($("taskStatus"),"BOTROL AI is creating a safe task plan...");
+ const headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"};
+ try{
+  const response=await fetch(API+"/api/v1/admin/tasks/execute",{method:"POST",headers,body:JSON.stringify({device_id:DEVICE,transcript})});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(data.detail||("HTTP "+response.status));
+  const task=data.task;
+  show($("taskStatus"),"PLAN: "+task.summary+"\\n"+task.steps.map((s,i)=>(i+1)+". "+s.command+" · queued").join("\\n")+"\\n\\nWaiting for ESP32...");
+  const start=Date.now();
+  while(Date.now()-start<90000){
+   await wait(1500);
+   const sr=await fetch(API+"/api/v1/admin/tasks/"+encodeURIComponent(task.task_id),{headers:{"Authorization":"Bearer "+token}});
+   const sd=await sr.json().catch(()=>({}));
+   if(!sr.ok)throw new Error(sd.detail||"Could not read task status");
+   const done=sd.steps.every(s=>s.status==="completed"||s.status==="failed");
+   show($("taskStatus"),"PLAN: "+task.summary+"\\n"+sd.steps.map((s,i)=>(i+1)+". "+s.command+" · "+s.status.toUpperCase()+(s.result?" · "+s.result:"")).join("\\n"),sd.steps.some(s=>s.status==="failed")?"bad":done?"good":"");
+   if(done)return;
+  }
+  show($("taskStatus"),"Task is still pending. Check ESP32 power, Wi-Fi and Bluetooth pairing.","bad");
+ }catch(error){show($("taskStatus"),"Task failed: "+error.message,"bad");}
+ finally{$("adminToken").value="";button.disabled=false;}
+}
+$("runTask").addEventListener("click",executeTask);
+$("voiceButton").addEventListener("click",()=>{
+ const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!Speech){show($("taskStatus"),"Speech recognition is unavailable here. Type your task instead.","bad");return;}
+ const recognition=new Speech();recognition.lang="en-IN";recognition.interimResults=false;recognition.maxAlternatives=1;
+ $("voiceButton").disabled=true;show($("taskStatus"),"Listening...");
+ recognition.onresult=e=>{$("taskText").value=e.results[0][0].transcript;show($("taskStatus"),"Recognized: "+$("taskText").value+"\\nReview it, then click Plan & execute.");};
+ recognition.onerror=e=>show($("taskStatus"),"Voice input error: "+e.error,"bad");
+ recognition.onend=()=>{$("voiceButton").disabled=false;};
+ recognition.start();
+});
 </script></body></html>
