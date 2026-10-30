@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
+from ai_planner import plan_task, PlannerError
+
 app = FastAPI(
     title="BOTROL Cloud API",
     version="0.3.0",
@@ -71,6 +73,11 @@ class CommandRequest(BaseModel):
     # Commands are fixed identifiers. No shell commands, scripts, or arbitrary keystrokes.
     command: str = Field(pattern="^(ping|ble_open_notepad|ble_open_calculator)$")
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class TaskRequest(BaseModel):
+    device_id: str = Field(min_length=1, max_length=80)
+    transcript: str = Field(min_length=1, max_length=2000)
 
 
 class CommandResult(BaseModel):
@@ -169,3 +176,45 @@ def enqueue_command(body: CommandRequest) -> dict[str, Any]:
     commands[command["command_id"]] = command
     queues[body.device_id].append(command)
     return {"ok": True, "command": command}
+
+
+@app.post("/api/v1/admin/tasks/execute", dependencies=[Depends(require_admin)])
+def execute_task(body: TaskRequest) -> dict[str, Any]:
+    if body.device_id not in devices:
+        raise HTTPException(status_code=404, detail="Device is not registered")
+    try:
+        plan = plan_task(body.transcript)
+    except PlannerError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    task_id = str(uuid4())
+    task_steps = []
+    for index, step in enumerate(plan["steps"], start=1):
+        command = {
+            "command_id": str(uuid4()),
+            "task_id": task_id,
+            "step": index,
+            "device_id": body.device_id,
+            "command": step["command"],
+            "payload": step["payload"],
+            "status": "queued",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        commands[command["command_id"]] = command
+        queues[body.device_id].append(command)
+        task_steps.append({"command_id": command["command_id"], "command": command["command"], "status": "queued"})
+    return {"ok": True, "task": {"task_id": task_id, "summary": plan["summary"], "steps": task_steps}}
+
+
+@app.get("/api/v1/admin/tasks/{task_id}", dependencies=[Depends(require_admin)])
+def get_task_status(task_id: str) -> dict[str, Any]:
+    task_commands = sorted(
+        [item for item in commands.values() if item.get("task_id") == task_id],
+        key=lambda item: item["step"],
+    )
+    if not task_commands:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"ok": True, "task_id": task_id, "steps": [
+        {"command_id": item["command_id"], "command": item["command"],
+         "status": item["status"], "result": item.get("result", "")}
+        for item in task_commands
+    ]}
