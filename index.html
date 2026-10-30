@@ -1,8 +1,50 @@
-<!Doctype html>
-<html>
-  <main>
-    <body>
-      <p>"vanakkam"</p>
-    </body>
-  </main>
-</html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090d18">
+<meta name="description" content="Set up BOTROL, your Bluetooth-enabled desktop assistant."><title>BOTROL Setup</title>
+<style>
+:root{color-scheme:dark;--bg:#090d18;--panel:#111a2a;--line:#293750;--text:#edf3ff;--muted:#a0aec2;--accent:#aab6ff;--good:#65e0b2;--warn:#ffd27a}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 15% 0%,#29366b66,transparent 42%),radial-gradient(ellipse at 100% 20%,#17645a33,transparent 35%),var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{width:min(900px,calc(100% - 32px));margin:auto;padding:34px 0 52px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:52px}.brand{display:flex;align-items:center;gap:12px;font-weight:850;letter-spacing:.16em}.mark{width:38px;height:38px;display:grid;place-items:center;border:1px solid #7183d8;border-radius:12px;background:#222e52;font-size:20px}.pill{border:1px solid var(--line);border-radius:99px;padding:5px 11px;color:var(--muted);font-size:12px}
+.eyebrow{color:var(--accent);font-size:12px;font-weight:750;letter-spacing:.18em;text-transform:uppercase}h1{font-size:clamp(40px,7vw,66px);line-height:1.04;letter-spacing:-.055em;margin:12px 0 16px}h1 span{color:var(--accent)}.lead{color:var(--muted);font-size:17px;max-width:620px;margin:0 0 32px}
+.panel{background:linear-gradient(155deg,#141e30f5,#0d1422f5);border:1px solid var(--line);border-radius:20px;padding:clamp(19px,4vw,30px);box-shadow:0 22px 70px #0004}.head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}h2{font-size:19px;margin:0}.hint{color:var(--muted);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.os{min-height:82px;border:1px solid var(--line);border-radius:14px;background:#0c1422;color:var(--text);text-align:left;padding:14px;cursor:pointer}.os:hover{border-color:#7183d8}.os[aria-pressed=true]{border-color:var(--accent);background:#7889ed20;box-shadow:inset 0 0 0 1px #aab6ff44}.os strong{display:block}.os small{color:var(--muted)}
+.progress{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:24px 0}.step{border-top:2px solid #344158;padding-top:9px;color:var(--muted);font-size:12px}.step b{display:block;color:inherit;font-size:13px}.step.active{border-color:var(--accent);color:var(--text)}.step.done{border-color:var(--good);color:var(--good)}
+.instructions{background:#050a132e;border:1px solid var(--line);border-radius:14px;padding:19px}h3{font-size:16px;margin:0 0 10px}ol{margin:0;padding-left:22px;color:#c6d0e0}li{padding:4px 0 4px 4px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.action{display:inline-flex;align-items:center;justify-content:center;min-height:43px;padding:10px 15px;border-radius:11px;border:1px solid #7183d8;background:#8797f4;color:#091020;font:inherit;font-weight:750;text-decoration:none;cursor:pointer}.secondary{background:transparent;color:var(--text);border-color:var(--line)}.action:disabled{opacity:.7;cursor:default}
+.status{display:flex;gap:12px;margin-top:19px;padding:14px;border:1px solid var(--line);border-radius:13px}.dot{width:9px;height:9px;flex:0 0 9px;border-radius:50%;margin-top:7px;background:var(--warn)}.status.confirmed .dot{background:var(--good)}.status strong{display:block;font-size:14px}.status p,.note{margin:2px 0 0;color:var(--muted);font-size:12px}.note{margin-top:16px}footer{display:flex;justify-content:space-between;gap:12px;margin-top:25px;color:#78869b;font-size:12px}footer a{color:var(--accent);text-decoration:none}
+@media(max-width:620px){.wrap{padding-top:23px}header{margin-bottom:38px}.grid{grid-template-columns:1fr}.os{min-height:65px}.progress{gap:7px}footer{flex-direction:column}}
+</style>
+</head>
+<body><main class="wrap">
+<header><div class="brand"><div class="mark" aria-hidden="true">B</div><span>BOTROL</span></div><span class="pill">DEVICE SETUP</span></header>
+<section><div class="eyebrow">Terminal Joint · Setup</div><h1>Your computer.<br><span>Your commands.</span></h1><p class="lead">Welcome to BOTROL. Follow this guide to prepare your computer to work with your BOTROL device.</p></section>
+<section class="panel" aria-labelledby="platform-title">
+<div class="head"><h2 id="platform-title">1. Choose your operating system</h2><span class="hint" id="detected">Detecting…</span></div>
+<div class="grid" role="group" aria-label="Operating system">
+<button class="os" data-os="windows" aria-pressed="false"><strong>Windows</strong><small>Windows 10 / 11</small></button>
+<button class="os" data-os="mac" aria-pressed="false"><strong>macOS</strong><small>Mac computers</small></button>
+<button class="os" data-os="linux" aria-pressed="false"><strong>Linux</strong><small>GNOME, KDE and others</small></button>
+</div>
+<div class="progress" aria-label="Setup progress"><div class="step active" id="p1"><b>01 · Select</b>Choose your OS</div><div class="step" id="p2"><b>02 · Pair</b>Connect Bluetooth</div><div class="step" id="p3"><b>03 · Confirm</b>Finish this step</div></div>
+<section class="instructions" aria-live="polite"><h3 id="instruction-title">2. Pair your BOTROL device</h3><ol id="instruction-list"><li>Choose your operating system above.</li><li>Turn on Bluetooth on your computer.</li><li>Open Bluetooth settings and look for <strong>BOTROL</strong>.</li></ol>
+<div class="actions"><a class="action" id="settings-link" href="#" hidden>Open Bluetooth settings ↗</a><button class="action secondary" id="paired-button">I've paired BOTROL</button></div></section>
+<div class="status" id="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><div><strong id="status-title">Waiting for setup confirmation</strong><p id="status-copy">Pair BOTROL in your computer's Bluetooth settings, then confirm here.</p></div></div>
+<p class="note">This page cannot directly detect a Bluetooth HID pairing. The status changes when you confirm pairing. Browser-based device communication is a separate feature and is not enabled yet.</p>
+</section>
+<footer><span>BOTROL · A Terminal Joint project</span><a href="https://terminaljoint.github.io/botrol-setup/">BOTROL Setup</a></footer>
+</main>
+<script>
+const buttons=[...document.querySelectorAll("[data-os]")],detected=document.getElementById("detected"),list=document.getElementById("instruction-list"),title=document.getElementById("instruction-title"),link=document.getElementById("settings-link"),confirmButton=document.getElementById("paired-button"),status=document.getElementById("status"),statusTitle=document.getElementById("status-title"),statusCopy=document.getElementById("status-copy");let selected="";
+const configs={
+windows:{name:"Windows",steps:["Turn on Bluetooth on your Windows computer.","Open Settings → Bluetooth & devices → Add device → Bluetooth.","Select <strong>BOTROL</strong> from the discovered devices and complete pairing."],url:"ms-settings:bluetooth"},
+mac:{name:"macOS",steps:["Turn on Bluetooth on your Mac.","Open System Settings → Bluetooth.","Find <strong>BOTROL</strong> under Nearby Devices and choose Connect."],url:"x-apple.systempreferences:com.apple.Bluetooth"},
+linux:{name:"Linux",steps:["Turn on Bluetooth on your computer.","Open your desktop's Bluetooth settings, usually from System Settings.","Choose Add Device / Pair New Device, select <strong>BOTROL</strong>, and complete pairing."],url:""}
+};
+function choose(os,automatic=false){selected=os;const c=configs[os];buttons.forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.os===os)));title.textContent="2. Pair BOTROL on "+c.name;list.innerHTML=c.steps.map(s=>"<li>"+s+"</li>").join("");link.hidden=!c.url;link.href=c.url||"#";detected.textContent=automatic?"Automatically detected":"Selected manually";p1.className="step done";p2.className="step active";p3.className="step";status.classList.remove("confirmed");statusTitle.textContent="Ready to pair on "+c.name;statusCopy.textContent="Follow the steps above, then confirm pairing below.";confirmButton.disabled=false;confirmButton.textContent="I've paired BOTROL";}
+buttons.forEach(b=>b.addEventListener("click",()=>choose(b.dataset.os)));
+function detect(){const p=(navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||navigator.userAgent;if(/Win/i.test(p))return"windows";if(/Mac|iPhone|iPad/i.test(p))return"mac";if(/Linux|X11/i.test(p))return"linux";return""}
+confirmButton.addEventListener("click",()=>{if(!selected){statusTitle.textContent="Choose your operating system first";statusCopy.textContent="Select Windows, macOS or Linux to see the correct pairing steps.";return}status.classList.add("confirmed");statusTitle.textContent="Pairing confirmed by you";statusCopy.textContent="This step is marked complete. The browser has not independently verified the Bluetooth connection.";p2.className="step done";p3.className="step active";confirmButton.textContent="Pairing confirmed ✓";confirmButton.disabled=true});
+const os=detect();if(os)choose(os,true);else detected.textContent="Select your OS";
+</script></body></html>
