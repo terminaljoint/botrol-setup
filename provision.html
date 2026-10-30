@@ -5,74 +5,110 @@
 <meta name="theme-color" content="#090d18"><title>BOTROL · Device Provisioning</title>
 <style>
 :root{color-scheme:dark;--bg:#090d18;--panel:#111a2a;--line:#293750;--text:#edf3ff;--muted:#a0aec2;--accent:#aab6ff;--good:#65e0b2;--bad:#ff8585}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 15% 0%,#29366b66,transparent 42%),var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{width:min(620px,calc(100% - 32px));margin:auto;padding:34px 0 50px}header{font-weight:850;letter-spacing:.16em;margin-bottom:38px}.panel{background:linear-gradient(155deg,#141e30f5,#0d1422f5);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 22px 70px #0004;margin:16px 0}h1{font-size:clamp(34px,7vw,48px);line-height:1.05;letter-spacing:-.05em;margin:8px 0 12px}h1 span{color:var(--accent)}h2{font-size:18px;margin:0 0 8px}.muted{color:var(--muted);font-size:13px}.field{display:block;margin:17px 0 7px;font-weight:650;font-size:13px}input{width:100%;background:#080f1d;border:1px solid var(--line);border-radius:11px;padding:13px;color:var(--text);font:inherit}button{border:1px solid #7183d8;background:#8797f4;color:#091020;border-radius:11px;padding:12px 17px;font:inherit;font-weight:750;cursor:pointer}button.secondary{background:transparent;color:var(--text);border-color:var(--line)}button:disabled{opacity:.55;cursor:wait}.row{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.status{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}.status.good{border-color:#65e0b277;color:var(--good)}.status.bad{border-color:#ff858577;color:var(--bad)}.notice{margin-top:15px;padding:13px;border-radius:11px;background:#ffd27a12;border:1px solid #ffd27a55;color:#e8d5a8;font-size:12px}a{color:var(--accent)}</style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 15% 0%,#29366b66,transparent 42%),var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{width:min(620px,calc(100% - 32px));margin:auto;padding:34px 0 50px}header{font-weight:850;letter-spacing:.16em;margin-bottom:38px}.panel{background:linear-gradient(155deg,#141e30f5,#0d1422f5);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 22px 70px #0004;margin:16px 0}h1{font-size:clamp(34px,7vw,48px);line-height:1.05;letter-spacing:-.05em;margin:8px 0 12px}h1 span{color:var(--accent)}h2{font-size:18px;margin:0 0 8px}.muted{color:var(--muted);font-size:13px}.field{display:block;margin:17px 0 7px;font-weight:650;font-size:13px}input{width:100%;background:#080f1d;border:1px solid var(--line);border-radius:11px;padding:13px;color:var(--text);font:inherit}button{border:1px solid #7183d8;background:#8797f4;color:#091020;border-radius:11px;padding:12px 17px;font:inherit;font-weight:750;cursor:pointer}button.secondary{background:transparent;color:var(--text);border-color:var(--line)}button:disabled{opacity:.55;cursor:wait}.row{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.status{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}.status.good{border-color:#65e0b277;color:var(--good)}.status.bad{border-color:#ff858577;color:var(--bad)}.notice{margin-top:15px;padding:13px;border-radius:11px;background:#ffd27a12;border:1px solid #ffd27a55;color:#e8d5a8;font-size:12px}a{color:var(--accent)}code{color:var(--accent)}
+</style>
 </head>
 <body><main class="wrap">
 <header>BOTROL / TERMINAL JOINT</header>
 <h1>Connect your <span>device.</span></h1>
-<p class="muted">Provision Wi-Fi directly over Bluetooth. Your Wi-Fi password is sent to the ESP32 and is not uploaded to BOTROL Cloud.</p>
+<p class="muted">Configure Wi-Fi directly over USB. Your Wi-Fi password is sent from this page to the ESP32 and is not uploaded to BOTROL Cloud.</p>
 <section class="panel">
-<h2>1 · Connect to BOTROL</h2>
-<p class="muted">The ESP32 should already be paired as a Bluetooth keyboard. Click Connect BOTROL, then select the BOTROL device in Chrome's device picker. If its name differs, identify it by the device you just paired.</p>
-<div class="row"><button id="connect">Connect BOTROL</button><button class="secondary" id="disconnect" disabled>Disconnect</button></div>
-<div class="status" id="connection">Not connected</div>
+<h2>1 · Connect ESP32 over USB</h2>
+<p class="muted">Connect the ESP32 to this computer with a USB data cable. Click below and select its serial port, usually shown as Silicon Labs CP210x or USB Serial Device.</p>
+<div class="row"><button id="connect">Choose ESP32 port</button><button class="secondary" id="disconnect" disabled>Disconnect</button></div>
+<div class="status" id="connection">Not connected · Chrome or Edge required</div>
 </section>
 <section class="panel">
 <h2>2 · Configure Wi-Fi</h2>
 <label class="field" for="ssid">Wi-Fi network name (SSID)</label><input id="ssid" maxlength="32" autocomplete="off" placeholder="Your Wi-Fi name">
 <label class="field" for="password">Wi-Fi password</label><input id="password" maxlength="63" type="password" autocomplete="new-password" placeholder="Password">
 <div class="row"><button id="send" disabled>Save and connect</button></div>
-<div class="status" id="deviceStatus">Waiting for device connection</div>
-<div class="notice">Credentials are sent over the encrypted BLE connection. This prototype does not send them to the cloud. Use a trusted computer and keep your BOTROL device physically nearby during setup.</div>
+<div class="status" id="deviceStatus">Waiting for ESP32 USB connection</div>
+<div class="notice">The browser sends credentials over the selected USB serial port at 115200 baud. The ESP32 saves them in local NVS only after successfully connecting. Do not close this page until a result appears.</div>
 </section>
 <p class="muted"><a href="./dashboard.html">Open BOTROL Command Center</a></p>
 </main>
 <script>
-const SERVICE="7b100001-6d2a-4f8b-9c31-2d5a7e110001";
-const CONFIG="7b100002-6d2a-4f8b-9c31-2d5a7e110001";
-const STATUS="7b100003-6d2a-4f8b-9c31-2d5a7e110001";
-const INFO="7b100004-6d2a-4f8b-9c31-2d5a7e110001";
 const $=id=>document.getElementById(id);
-let device=null,server=null,configChar=null,statusChar=null;
+let port=null,reader=null,writer=null,readTask=null,connected=false,rxBuffer="";
 function show(el,message,kind=""){el.textContent=message;el.className="status"+(kind?" "+kind:"")}
-function decode(value){return new TextDecoder().decode(value)}
+function parseLine(line){
+  const trimmed=line.trim();
+  if(!trimmed.startsWith("{"))return;
+  try{
+    const data=JSON.parse(trimmed);
+    if(data.type==="status"){
+      const detail=[data.state,data.detail,data.wifi==="connected"?"Wi-Fi: "+(data.ssid||"connected"):""].filter(Boolean).join("\n");
+      const kind=["wifi_connected","usb_ready","setup_required"].includes(data.state)?"good":["error","wifi_failed"].includes(data.state)?"bad":"";
+      show($("deviceStatus"),detail,kind);
+    }
+  }catch{}
+}
+async function readLoop(){
+  try{
+    while(connected&&reader){
+      const {value,done}=await reader.read();
+      if(done)break;
+      rxBuffer+=value;
+      let newline;
+      while((newline=rxBuffer.indexOf("\n"))>=0){
+        parseLine(rxBuffer.slice(0,newline));
+        rxBuffer=rxBuffer.slice(newline+1);
+      }
+      if(rxBuffer.length>2048)rxBuffer="";
+    }
+  }catch(error){
+    if(connected)show($("connection"),"USB read error: "+error.message,"bad");
+  }
+}
 async function connect(){
- if(!navigator.bluetooth){show($("connection"),"Web Bluetooth is unavailable. Use a recent Chrome or Edge browser over HTTPS.","bad");return}
- $("connect").disabled=true;
- try{
-  // Do not assume the HID advertised name exactly matches "BOTROL".
-  // Show nearby BLE devices; the provisioning service is checked after selection.
-  device=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:[SERVICE]});
-  device.addEventListener("gattserverdisconnected",()=>{server=null;configChar=null;statusChar=null;$("send").disabled=true;$("disconnect").disabled=true;$("connect").disabled=false;show($("connection"),"BOTROL disconnected","bad")});
-  server=await device.gatt.connect();
-  const service=await server.getPrimaryService(SERVICE);
-  configChar=await service.getCharacteristic(CONFIG);
-  statusChar=await service.getCharacteristic(STATUS);
-  await statusChar.startNotifications();
-  statusChar.addEventListener("characteristicvaluechanged",event=>show($("deviceStatus"),decode(event.target.value)));
-  const info=await service.getCharacteristic(INFO);
-  const details=decode((await info.readValue()));
-  $("send").disabled=false;$("disconnect").disabled=false;
-  show($("connection"),"Connected to "+(device.name||"selected BLE device")+"\n"+details,"good");
-  show($("deviceStatus"),"Connected. Ready to configure Wi-Fi.","good");
- }catch(error){
-  const message=error.name==="NotFoundError"?"No device selected. Make sure BOTROL is powered on and advertising, then try again.":error.name==="NotSupportedError"?"The selected device does not expose BOTROL's provisioning service. Select the ESP32 device, not another nearby Bluetooth device.":(error.message||String(error));
-  show($("connection"),message,"bad");$("connect").disabled=false;
- }
+  if(!("serial" in navigator)){show($("connection"),"Web Serial is unavailable. Use a recent Chrome or Edge browser on HTTPS or localhost.","bad");return}
+  $("connect").disabled=true;
+  try{
+    port=await navigator.serial.requestPort();
+    await port.open({baudRate:115200});
+    connected=true;
+    const decoder=new TextDecoderStream();
+    port.readable.pipeTo(decoder.writable).catch(()=>{});
+    reader=decoder.readable.getReader();
+    writer=port.writable.getWriter();
+    $("disconnect").disabled=false;
+    $("send").disabled=false;
+    show($("connection"),"USB serial connected at 115200 baud. Waiting for BOTROL...","good");
+    show($("deviceStatus"),"Listening for ESP32 status...");
+    readTask=readLoop();
+  }catch(error){
+    connected=false;port=null;reader=null;writer=null;
+    show($("connection"),error.name==="NotFoundError"?"No serial port selected.":error.message||String(error),"bad");
+    $("connect").disabled=false;
+  }
+}
+async function disconnect(){
+  connected=false;
+  $("send").disabled=true;$("disconnect").disabled=true;$("connect").disabled=false;
+  try{if(reader){await reader.cancel();reader.releaseLock()}}catch{}
+  try{if(writer){writer.releaseLock()}}catch{}
+  try{if(port)await port.close()}catch{}
+  reader=null;writer=null;port=null;
+  show($("connection"),"USB serial disconnected");
+  show($("deviceStatus"),"Connect the ESP32 to continue");
 }
 async function sendConfig(){
- const ssid=$("ssid").value,password=$("password").value;
- if(!configChar||!ssid.trim()){show($("deviceStatus"),"Connect BOTROL and enter a Wi-Fi network name.","bad");return}
- $("send").disabled=true;
- try{
-  const payload=new TextEncoder().encode(JSON.stringify({ssid:ssid.trim(),password}));
-  await configChar.writeValueWithResponse(payload);
-  $("password").value="";
-  show($("deviceStatus"),"Credentials sent. Waiting for the ESP32 Wi-Fi connection result...");
- }catch(error){show($("deviceStatus"),"Could not send configuration: "+error.message,"bad")}
- finally{$("send").disabled=!configChar}
+  const ssid=$("ssid").value.trim(),password=$("password").value;
+  if(!connected||!writer){show($("deviceStatus"),"Connect the ESP32 first.","bad");return}
+  if(!ssid){show($("deviceStatus"),"Enter a Wi-Fi network name.","bad");return}
+  if(ssid.length>32||password.length>63){show($("deviceStatus"),"SSID must be at most 32 characters and password at most 63.","bad");return}
+  $("send").disabled=true;
+  try{
+    const command=JSON.stringify({type:"wifi_config",ssid,password})+"\n";
+    await writer.write(new TextEncoder().encode(command));
+    $("password").value="";
+    show($("deviceStatus"),"Configuration sent over USB. Waiting for Wi-Fi connection result...");
+  }catch(error){show($("deviceStatus"),"Could not send configuration: "+error.message,"bad")}
+  finally{$("send").disabled=!connected}
 }
 $("connect").addEventListener("click",connect);
-$("disconnect").addEventListener("click",()=>{if(device?.gatt?.connected)device.gatt.disconnect()});
+$("disconnect").addEventListener("click",disconnect);
 $("send").addEventListener("click",sendConfig);
+if("serial" in navigator)navigator.serial.addEventListener("disconnect",()=>{disconnect()});
 </script></body></html>
