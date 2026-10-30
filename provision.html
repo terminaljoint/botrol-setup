@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090d18"><title>BOTROL · Device Provisioning</title>
+<style>
+:root{color-scheme:dark;--bg:#090d18;--panel:#111a2a;--line:#293750;--text:#edf3ff;--muted:#a0aec2;--accent:#aab6ff;--good:#65e0b2;--bad:#ff8585}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 15% 0%,#29366b66,transparent 42%),var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{width:min(620px,calc(100% - 32px));margin:auto;padding:34px 0 50px}header{font-weight:850;letter-spacing:.16em;margin-bottom:38px}.panel{background:linear-gradient(155deg,#141e30f5,#0d1422f5);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 22px 70px #0004;margin:16px 0}h1{font-size:clamp(34px,7vw,48px);line-height:1.05;letter-spacing:-.05em;margin:8px 0 12px}h1 span{color:var(--accent)}h2{font-size:18px;margin:0 0 8px}.muted{color:var(--muted);font-size:13px}.field{display:block;margin:17px 0 7px;font-weight:650;font-size:13px}input{width:100%;background:#080f1d;border:1px solid var(--line);border-radius:11px;padding:13px;color:var(--text);font:inherit}button{border:1px solid #7183d8;background:#8797f4;color:#091020;border-radius:11px;padding:12px 17px;font:inherit;font-weight:750;cursor:pointer}button.secondary{background:transparent;color:var(--text);border-color:var(--line)}button:disabled{opacity:.55;cursor:wait}.row{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.status{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}.status.good{border-color:#65e0b277;color:var(--good)}.status.bad{border-color:#ff858577;color:var(--bad)}.notice{margin-top:15px;padding:13px;border-radius:11px;background:#ffd27a12;border:1px solid #ffd27a55;color:#e8d5a8;font-size:12px}a{color:var(--accent)}</style>
+</head>
+<body><main class="wrap">
+<header>BOTROL / TERMINAL JOINT</header>
+<h1>Connect your <span>device.</span></h1>
+<p class="muted">Provision Wi-Fi directly over Bluetooth. Your Wi-Fi password is sent to the ESP32 and is not uploaded to BOTROL Cloud.</p>
+<section class="panel">
+<h2>1 · Connect to BOTROL</h2>
+<p class="muted">Power on the ESP32, pair the BOTROL keyboard in your computer's Bluetooth settings, then connect here.</p>
+<div class="row"><button id="connect">Connect BOTROL</button><button class="secondary" id="disconnect" disabled>Disconnect</button></div>
+<div class="status" id="connection">Not connected</div>
+</section>
+<section class="panel">
+<h2>2 · Configure Wi-Fi</h2>
+<label class="field" for="ssid">Wi-Fi network name (SSID)</label><input id="ssid" maxlength="32" autocomplete="off" placeholder="Your Wi-Fi name">
+<label class="field" for="password">Wi-Fi password</label><input id="password" maxlength="63" type="password" autocomplete="new-password" placeholder="Password">
+<div class="row"><button id="send" disabled>Save and connect</button></div>
+<div class="status" id="deviceStatus">Waiting for device connection</div>
+<div class="notice">Credentials are sent over the encrypted BLE connection. This prototype does not send them to the cloud. Use a trusted computer and keep your BOTROL device physically nearby during setup.</div>
+</section>
+<p class="muted"><a href="./dashboard.html">Open BOTROL Command Center</a></p>
+</main>
+<script>
+const SERVICE="7b100001-6d2a-4f8b-9c31-2d5a7e110001";
+const CONFIG="7b100002-6d2a-4f8b-9c31-2d5a7e110001";
+const STATUS="7b100003-6d2a-4f8b-9c31-2d5a7e110001";
+const INFO="7b100004-6d2a-4f8b-9c31-2d5a7e110001";
+const $=id=>document.getElementById(id);
+let device=null,server=null,configChar=null,statusChar=null;
+function show(el,message,kind=""){el.textContent=message;el.className="status"+(kind?" "+kind:"")}
+function decode(value){return new TextDecoder().decode(value)}
+async function connect(){
+ if(!navigator.bluetooth){show($("connection"),"Web Bluetooth is unavailable. Use a recent Chrome or Edge browser over HTTPS.","bad");return}
+ $("connect").disabled=true;
+ try{
+  device=await navigator.bluetooth.requestDevice({filters:[{name:"BOTROL"}],optionalServices:[SERVICE]});
+  device.addEventListener("gattserverdisconnected",()=>{server=null;configChar=null;statusChar=null;$("send").disabled=true;$("disconnect").disabled=true;$("connect").disabled=false;show($("connection"),"BOTROL disconnected","bad")});
+  server=await device.gatt.connect();
+  const service=await server.getPrimaryService(SERVICE);
+  configChar=await service.getCharacteristic(CONFIG);
+  statusChar=await service.getCharacteristic(STATUS);
+  await statusChar.startNotifications();
+  statusChar.addEventListener("characteristicvaluechanged",event=>show($("deviceStatus"),decode(event.target.value)));
+  const info=await service.getCharacteristic(INFO);
+  const details=decode((await info.readValue()));
+  $("send").disabled=false;$("disconnect").disabled=false;
+  show($("connection"),"Connected to "+device.name+"\n"+details,"good");
+  show($("deviceStatus"),"Connected. Ready to configure Wi-Fi.","good");
+ }catch(error){show($("connection"),error.message||String(error),"bad");$("connect").disabled=false}
+}
+async function sendConfig(){
+ const ssid=$("ssid").value,password=$("password").value;
+ if(!configChar||!ssid.trim()){show($("deviceStatus"),"Connect BOTROL and enter a Wi-Fi network name.","bad");return}
+ $("send").disabled=true;
+ try{
+  const payload=new TextEncoder().encode(JSON.stringify({ssid:ssid.trim(),password}));
+  await configChar.writeValueWithResponse(payload);
+  $("password").value="";
+  show($("deviceStatus"),"Credentials sent. Waiting for the ESP32 Wi-Fi connection result...");
+ }catch(error){show($("deviceStatus"),"Could not send configuration: "+error.message,"bad")}
+ finally{$("send").disabled=!configChar}
+}
+$("connect").addEventListener("click",connect);
+$("disconnect").addEventListener("click",()=>{if(device?.gatt?.connected)device.gatt.disconnect()});
+$("send").addEventListener("click",sendConfig);
+</script></body></html>
