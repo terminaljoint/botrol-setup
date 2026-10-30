@@ -1,43 +1,44 @@
 # BOTROL Cloud API
 
-FastAPI relay for BOTROL ESP32 devices and desktop agents.
+FastAPI relay for BOTROL ESP32 devices. The ESP32 polls this service over HTTPS and can execute a small allowlist of BLE HID keyboard actions on a paired computer.
 
 ## Routes
 
 - `GET /health`: service health
 - `POST /api/v1/devices/register`: register ESP32 (device token)
-- `GET /api/v1/devices/{device_id}/commands/next`: ESP32 command polling (device token)
-- `POST /api/v1/devices/{device_id}/commands/{command_id}/result`: ESP32 result (device token)
-- `POST /api/v1/admin/commands`: enqueue ESP32 `ping` (admin token)
-- `POST /api/v1/desktops/register`: register desktop agent (desktop token)
-- `GET /api/v1/desktops/{desktop_id}/commands/next`: desktop command polling (desktop token)
-- `POST /api/v1/desktops/{desktop_id}/commands/{command_id}/result`: desktop result (desktop token)
-- `POST /api/v1/admin/desktop-commands`: enqueue an allowlisted desktop action (admin token)
+- `GET /api/v1/devices/{device_id}/commands/next`: fetch next command (device token)
+- `POST /api/v1/devices/{device_id}/commands/{command_id}/result`: report result (device token)
+- `POST /api/v1/admin/commands`: queue an allowlisted command (admin token)
 
-## Desktop command allowlist
+## Command allowlist
 
-Only `open_notepad` and `open_calculator` are accepted. The cloud API only queues these identifiers. The desktop agent maps them to fixed local application launches. It does not run shell commands or arbitrary scripts.
+- `ping`: connectivity test
+- `ble_open_notepad`: ask the ESP32 BLE keyboard to open Notepad using Windows + R
+- `ble_open_calculator`: ask the ESP32 BLE keyboard to open Calculator using Windows + R
+
+The API rejects all other command identifiers. It does not accept arbitrary shell commands, scripts, URLs, or raw keystroke sequences.
 
 ## Render environment variables
 
-- `BOTROL_DEVICE_TOKEN`: separate secret used by the ESP32 firmware.
-- `BOTROL_DESKTOP_TOKEN`: separate secret used by the desktop agent.
-- `BOTROL_ADMIN_TOKEN`: secret used by the command dashboard to enqueue commands.
+- `BOTROL_DEVICE_TOKEN`: secret shared with ESP32 firmware.
+- `BOTROL_ADMIN_TOKEN`: secret used by the dashboard to enqueue commands.
 - `BOTROL_ALLOWED_ORIGINS`: `https://botrol-setup.vercel.app`
 
-The Render blueprint asks Render to generate all three secrets. If the service already exists, ensure `BOTROL_DESKTOP_TOKEN` is added under Render → Environment. Never commit real tokens or put them in public source code.
+Never commit real tokens or place them in public source code.
 
-## Deploy
+## Deployment
 
-The Render service uses Root Directory `backend`, build command `pip install -r requirements.txt`, and start command `uvicorn main:app --host 0.0.0.0 --port $PORT`.
+Render uses Root Directory `backend`, build command `pip install -r requirements.txt`, and start command `uvicorn main:app --host 0.0.0.0 --port $PORT`.
 
 ## Prototype limitations
 
-Device/desktop records and command queues are stored in memory. They disappear when the service restarts or sleeps. This is a connectivity prototype, not a reliable production command system. Before broader use, add persistent storage, per-device credential management, command expiry, replay protection, rate limits, audit logging, and stronger transport/device security.
+Device records and command queues are stored in memory and disappear when the service restarts or sleeps. This is a connectivity prototype. Before relying on BOTROL, add persistent storage, command expiry, replay protection, rate limits, audit logging, and stronger device authentication.
+
+BLE HID requires one-time pairing with the computer. This milestone's shortcut commands are Windows-specific. The browser sends requests to the cloud; the ESP32 performs the BLE keyboard action.
 
 ## Local run
 
-Install dependencies, set the three token environment variables, then run:
+Set `BOTROL_DEVICE_TOKEN` and `BOTROL_ADMIN_TOKEN`, then run:
 
 ```bash
 uvicorn main:app --reload
