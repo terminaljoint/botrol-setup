@@ -37,7 +37,41 @@ const API="https://botrol-cloud.onrender.com",DEVICE="BOTROL-ESP32-001";
 const $=id=>document.getElementById(id);
 function show(el,message,type=""){el.textContent=message;el.className="status"+(type?" "+type:"");}
 $("health").addEventListener("click",async()=>{const b=$("health");b.disabled=true;show($("healthStatus"),"Contacting BOTROL Cloud...");try{const r=await fetch(API+"/health");const d=await r.json();if(!r.ok)throw new Error("HTTP "+r.status);show($("healthStatus"),"CONNECTED · "+d.service+" · "+d.status+" · v"+d.version,"good");}catch(e){show($("healthStatus"),"Cloud connection failed: "+e.message,"bad");}finally{b.disabled=false;}});
-async function send(command,button){const token=$("adminToken").value.trim();if(!token){show($("commandStatus"),"Enter your BOTROL_ADMIN_TOKEN first.","bad");$("adminToken").focus();return;}button.disabled=true;show($("commandStatus"),"Sending "+command+" to BOTROL Cloud...");try{const r=await fetch(API+"/api/v1/admin/commands",{method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({device_id:DEVICE,command})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||("HTTP "+r.status));show($("commandStatus"),"COMMAND QUEUED ✓\nTarget: "+DEVICE+"\nCommand: "+command+"\nID: "+(d.command?.command_id||"accepted")+"\n\nThe ESP32 should receive it on its next poll. Check Arduino Serial Monitor for its result.","good");}catch(e){show($("commandStatus"),"Command failed: "+e.message,"bad");}finally{$("adminToken").value="";button.disabled=false;}}
+const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function send(command,button){
+ const token=$("adminToken").value.trim();
+ if(!token){show($("commandStatus"),"Enter your BOTROL_ADMIN_TOKEN first.","bad");$("adminToken").focus();return;}
+ button.disabled=true;
+ show($("commandStatus"),"Sending "+command+" to BOTROL Cloud...");
+ try{
+  const headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"};
+  const r=await fetch(API+"/api/v1/admin/commands",{method:"POST",headers,body:JSON.stringify({device_id:DEVICE,command})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.detail||("HTTP "+r.status));
+  const id=d.command?.command_id;
+  if(!id)throw new Error("Cloud accepted the request but returned no command ID.");
+  show($("commandStatus"),"COMMAND QUEUED ✓\nTarget: "+DEVICE+"\nCommand: "+command+"\nWaiting for ESP32...");
+  const started=Date.now();
+  while(Date.now()-started<35000){
+   await wait(1500);
+   const sr=await fetch(API+"/api/v1/admin/commands/"+encodeURIComponent(id),{headers:{"Authorization":"Bearer "+token}});
+   const sd=await sr.json().catch(()=>({}));
+   if(!sr.ok)throw new Error(sd.detail||("Status check HTTP "+sr.status));
+   const c=sd.command||{};
+   if(c.status==="completed"){
+    show($("commandStatus"),"EXECUTED ✓\nCommand: "+c.command+"\nResult: "+(c.result||"Completed") ,"good");
+    return;
+   }
+   if(c.status==="failed"){
+    show($("commandStatus"),"EXECUTION FAILED\nCommand: "+c.command+"\nReason: "+(c.result||"No details returned"),"bad");
+    return;
+   }
+   show($("commandStatus"),"Command: "+command+"\nStatus: "+(c.status||"queued")+"\nWaiting for ESP32 result...");
+  }
+  show($("commandStatus"),"COMMAND STILL PENDING\nThe cloud has not received an execution result yet. Check that the ESP32 is powered, online, and paired with your computer.","bad");
+ }catch(e){show($("commandStatus"),"Command failed: "+e.message,"bad");}
+ finally{$("adminToken").value="";button.disabled=false;}
+}
 $("sendPing").addEventListener("click",e=>send("ping",e.currentTarget));
 document.querySelectorAll("[data-command]").forEach(button=>button.addEventListener("click",e=>send(e.currentTarget.dataset.command,e.currentTarget)));
 </script></body></html>
