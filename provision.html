@@ -13,7 +13,7 @@
 <p class="muted">Provision Wi-Fi directly over Bluetooth. Your Wi-Fi password is sent to the ESP32 and is not uploaded to BOTROL Cloud.</p>
 <section class="panel">
 <h2>1 · Connect to BOTROL</h2>
-<p class="muted">Power on the ESP32, pair the BOTROL keyboard in your computer's Bluetooth settings, then connect here.</p>
+<p class="muted">The ESP32 should already be paired as a Bluetooth keyboard. Click Connect BOTROL, then select the BOTROL device in Chrome's device picker. If its name differs, identify it by the device you just paired.</p>
 <div class="row"><button id="connect">Connect BOTROL</button><button class="secondary" id="disconnect" disabled>Disconnect</button></div>
 <div class="status" id="connection">Not connected</div>
 </section>
@@ -40,7 +40,9 @@ async function connect(){
  if(!navigator.bluetooth){show($("connection"),"Web Bluetooth is unavailable. Use a recent Chrome or Edge browser over HTTPS.","bad");return}
  $("connect").disabled=true;
  try{
-  device=await navigator.bluetooth.requestDevice({filters:[{name:"BOTROL"}],optionalServices:[SERVICE]});
+  // Do not assume the HID advertised name exactly matches "BOTROL".
+  // Show nearby BLE devices; the provisioning service is checked after selection.
+  device=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:[SERVICE]});
   device.addEventListener("gattserverdisconnected",()=>{server=null;configChar=null;statusChar=null;$("send").disabled=true;$("disconnect").disabled=true;$("connect").disabled=false;show($("connection"),"BOTROL disconnected","bad")});
   server=await device.gatt.connect();
   const service=await server.getPrimaryService(SERVICE);
@@ -51,9 +53,12 @@ async function connect(){
   const info=await service.getCharacteristic(INFO);
   const details=decode((await info.readValue()));
   $("send").disabled=false;$("disconnect").disabled=false;
-  show($("connection"),"Connected to "+device.name+"\n"+details,"good");
+  show($("connection"),"Connected to "+(device.name||"selected BLE device")+"\n"+details,"good");
   show($("deviceStatus"),"Connected. Ready to configure Wi-Fi.","good");
- }catch(error){show($("connection"),error.message||String(error),"bad");$("connect").disabled=false}
+ }catch(error){
+  const message=error.name==="NotFoundError"?"No device selected. Make sure BOTROL is powered on and advertising, then try again.":error.name==="NotSupportedError"?"The selected device does not expose BOTROL's provisioning service. Select the ESP32 device, not another nearby Bluetooth device.":(error.message||String(error));
+  show($("connection"),message,"bad");$("connect").disabled=false;
+ }
 }
 async function sendConfig(){
  const ssid=$("ssid").value,password=$("password").value;
