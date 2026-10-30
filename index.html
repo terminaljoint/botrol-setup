@@ -33,7 +33,7 @@
 <div class="status" id="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><div><strong id="status-title">Waiting for setup confirmation</strong><p id="status-copy">Pair BOTROL in your computer's Bluetooth settings, then confirm here.</p></div></div>
 <p class="note">This page cannot directly detect a Bluetooth HID pairing. The status changes when you confirm pairing. Browser-based device communication is a separate feature and is not enabled yet.</p>
 </section>
-<footer><span>BOTROL · A Terminal Joint project</span><a href="https://terminaljoint.github.io/botrol-setup/">BOTROL Setup</a></footer>
+<footer><span>BOTROL · A Terminal Joint project</span><span><a href="https://terminaljoint.github.io/botrol-setup/">BOTROL Setup</a> · <a href="./dashboard.html">Open Command Center ↗</a></span></footer>
 </main>
 <script>
 const buttons=[...document.querySelectorAll("[data-os]")],detected=document.getElementById("detected"),list=document.getElementById("instruction-list"),title=document.getElementById("instruction-title"),link=document.getElementById("settings-link"),confirmButton=document.getElementById("paired-button"),status=document.getElementById("status"),statusTitle=document.getElementById("status-title"),statusCopy=document.getElementById("status-copy");let selected="";
