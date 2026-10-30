@@ -134,6 +134,26 @@ def report_result(
     return {"ok": True}
 
 
+@app.get("/api/v1/admin/commands/{command_id}", dependencies=[Depends(require_admin)])
+def get_command_status(command_id: str) -> dict[str, Any]:
+    command = commands.get(command_id)
+    if not command:
+        raise HTTPException(status_code=404, detail="Command not found")
+    return {
+        "ok": True,
+        "command": {
+            "command_id": command["command_id"],
+            "device_id": command["device_id"],
+            "command": command["command"],
+            "status": command["status"],
+            "result": command.get("result", ""),
+            "created_at": command["created_at"],
+            "delivered_at": command.get("delivered_at"),
+            "completed_at": command.get("completed_at"),
+        },
+    }
+
+
 @app.post("/api/v1/admin/commands", dependencies=[Depends(require_admin)])
 def enqueue_command(body: CommandRequest) -> dict[str, Any]:
     if body.device_id not in devices:
