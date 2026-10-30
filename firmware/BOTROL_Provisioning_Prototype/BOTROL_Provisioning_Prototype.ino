@@ -91,46 +91,81 @@ void startProvisioningService() {
   );
   config->setCallbacks(new ConfigCallbacks());
   statusChar->setValue("ready");
-  info->setValue("{\"name\":\"BOTROL\",\"protocol\":1,\"firmware\":\"provisioning-prototype-0.2\"}");
+  info->setValue("{\"name\":\"BOTROL\",\"protocol\":1,\"firmware\":\"provisioning-prototype-0.3\"}");
   if (!service->start()) {
     Serial.println("[BLE] ERROR: provisioning service failed to start");
     return;
   }
-  // Add the provisioning UUID to the existing HID advertisement.
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
   adv->addServiceUUID(SERVICE_UUID);
   Serial.println("[BLE] Provisioning GATT service registered");
 }
 
+size_t connectedPeerCount() {
+  if (!bleServer) return 0;
+  return bleServer->getPeerDevices().size();
+}
+
+bool disconnectAllBlePeers(const char* reason) {
+  if (!bleServer) return false;
+  Serial.printf("[BLE] Disconnecting peers (%s), current count: %u\n",
+                reason, (unsigned)connectedPeerCount());
+  auto peers = bleServer->getPeerDevices();
+  for (auto& peer : peers) {
+    bleServer->disconnect(peer);
+  }
+
+  uint32_t started = millis();
+  while (connectedPeerCount() != 0 && millis() - started < 4000) {
+    delay(50);
+  }
+  size_t remaining = connectedPeerCount();
+  Serial.printf("[BLE] Peer count after disconnect: %u\n", (unsigned)remaining);
+  return remaining == 0;
+}
+
 void enterProvisioningMode() {
   if (provisioningMode) return;
   Serial.println("[BLE] Switching HID -> provisioning");
-  keyboard.end(); // disconnect Windows HID host and stop advertising
-  delay(300);
+
+  // Stop HID advertising and ask the HID library to release its active host.
+  keyboard.end();
+
+  // Explicitly force any remaining GATT peers off the shared NimBLE server.
+  if (!disconnectAllBlePeers("enter provisioning")) {
+    Serial.println("[BLE] ERROR: host connection still active; not starting provisioning advertising");
+    return;
+  }
+
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+  adv->stop();
   adv->addServiceUUID(SERVICE_UUID);
   adv->enableScanResponse(true);
   NimBLEAdvertisementData scan;
   scan.setName(DEVICE_NAME);
   adv->setScanResponseData(scan);
+
   NimBLEDevice::startAdvertising();
   provisioningMode = true;
+  Serial.println("[BLE] Provisioning advertising started (BOTROL name + service UUID)");
   publishStatus("ready", "Connect from the BOTROL setup website");
 }
 
 void resumeKeyboardMode() {
   if (!provisioningMode) return;
   Serial.println("[BLE] Switching provisioning -> HID");
-  // Disconnect the browser GATT client before restarting keyboard advertising.
-  if (bleServer) {
-    auto peers = bleServer->getPeerDevices();
-    for (auto& peer : peers) bleServer->disconnect(peer);
-    delay(250);
+
+  if (!disconnectAllBlePeers("resume keyboard")) {
+    Serial.println("[BLE] ERROR: browser connection still active; delaying keyboard restart");
+    keyboardResumePending = true;
+    keyboardResumeAt = millis() + 1500;
+    return;
   }
+
   NimBLEDevice::stopAdvertising();
   statusChar = nullptr;
   provisioningMode = false;
-  keyboard.begin(); // library restart path reuses the existing NimBLE stack
+  keyboard.begin();
   Serial.println("[BLE] Keyboard advertising restarted");
 }
 
@@ -182,7 +217,7 @@ void handleWifiState() {
   }
   if (millis() - wifiAttemptAt < 20000) return;
   if (wifiAttempt == WIFI_CANDIDATE && restoreSsid.length()) {
-    publishStatus("restoring", "New network failed; restoring previous Wi-Fi");
+    publishStatus("restoring", "New Wi-Fi failed; restoring previous Wi-Fi");
     beginWifiAttempt(restoreSsid, restorePassword, WIFI_RESTORE);
   } else {
     WiFi.disconnect(false, false);
@@ -211,6 +246,7 @@ void setup() {
   prefs.begin("botrol", false);
   activeSsid = prefs.getString("ssid", "");
   activePassword = prefs.getString("password", "");
+
   keyboard.begin();
   startProvisioningService();
 
@@ -228,6 +264,7 @@ void loop() {
   openSetupPage();
   handleNewCredentials();
   handleWifiState();
+
   if (keyboardResumePending && (int32_t)(millis() - keyboardResumeAt) >= 0) {
     keyboardResumePending = false;
     resumeKeyboardMode();
