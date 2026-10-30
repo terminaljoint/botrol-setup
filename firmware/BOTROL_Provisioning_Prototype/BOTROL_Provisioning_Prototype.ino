@@ -39,7 +39,7 @@ void publishStatus(const String& state, const String& detail = "") {
   String value;
   serializeJson(doc, value);
   if (statusChar) {
-    statusChar->setValue(value);
+    statusChar->setValue(state);
     statusChar->notify();
   }
   Serial.println("[BOTROL] " + value);
@@ -194,6 +194,8 @@ void setup() {
   startProvisioningService();
 
   if (activeSsid.length()) {
+    candidateSsid = activeSsid;
+    candidatePassword = activePassword;
     publishStatus("wifi_reconnecting", "Using saved Wi-Fi configuration");
     beginWifiAttempt(activeSsid, activePassword, WIFI_CANDIDATE);
   } else {
