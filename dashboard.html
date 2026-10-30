@@ -12,28 +12,41 @@
 <header><div class="brand">◈ BOTROL</div><span class="pill">COMMAND CENTER · BETA</span></header>
 <div class="eyebrow">Terminal Joint · Cloud control</div>
 <h1>Your computer.<br><span>Your commands.</span></h1>
-<p class="lead">Send a test command through BOTROL Cloud to your registered ESP32 device.</p>
+<p class="lead">Send safe test commands to your BOTROL ESP32 or to the desktop agent running on your computer.</p>
 <section class="panel">
-<h2>Device connection</h2><div class="hint">Target device: <strong>BOTROL-ESP32-001</strong></div>
+<h2>Cloud connection</h2><div class="hint">BOTROL Cloud · Render</div>
 <div class="row"><button class="btn secondary" id="health">Check cloud status</button></div>
 <div class="status" id="healthStatus" role="status" aria-live="polite">Cloud status has not been checked yet.</div>
 </section>
 <section class="panel">
-<h2>Send a test command</h2><p class="hint">This first dashboard supports only the safe <strong>ping</strong> command.</p>
+<h2>ESP32 test</h2><p class="hint">Send the harmless <strong>ping</strong> command to BOTROL-ESP32-001.</p>
 <label class="field" for="adminToken">BOTROL admin token</label>
 <input id="adminToken" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Render BOTROL_ADMIN_TOKEN">
-<div class="row"><button class="btn" id="sendPing">Send PING →</button><button class="btn secondary" id="clear">Clear token</button></div>
-<div class="status" id="commandStatus" role="status" aria-live="polite">Ready. Enter your admin token to send a ping.</div>
-<div class="notice"><strong>Security:</strong> Your admin token is used only for this request and is not saved in browser storage. Clear the field after use. Never share it or commit it to GitHub. The token is sent to your BOTROL Cloud service over HTTPS.</div>
+<div class="row"><button class="btn" id="sendPing">Send ESP32 PING →</button></div>
+<div class="status" id="deviceStatus" role="status" aria-live="polite">Ready to send a ping.</div>
+</section>
+<section class="panel">
+<h2>Desktop actions</h2><p class="hint">Requires BOTROL Desktop Agent running on your computer. First-stage actions only open a text editor or calculator.</p>
+<label class="field" for="desktopToken">BOTROL admin token</label>
+<input id="desktopToken" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Render BOTROL_ADMIN_TOKEN">
+<div class="row"><button class="btn" data-command="open_notepad">Open text editor</button><button class="btn" data-command="open_calculator">Open calculator</button></div>
+<div class="status" id="desktopStatus" role="status" aria-live="polite">Desktop agent status is not yet checked. Start the agent first, then send a test action.</div>
+<div class="notice"><strong>Safety:</strong> These are the only desktop commands enabled in this prototype. They launch applications and do not read files, type, delete, or modify your data.</div>
+</section>
+<section class="panel">
+<h2>Desktop agent setup</h2>
+<p class="hint">Download the project from GitHub, then open <code>desktop-agent/Start-BOTROL-Desktop.bat</code>. The launcher creates a local config template on first run.</p>
+<p class="hint">Add the separate <strong>BOTROL_DESKTOP_TOKEN</strong> from Render to the local config file. Never upload that file or share the token.</p>
+<a href="https://github.com/TerminalJoint/botrol-setup/tree/main/desktop-agent">View desktop agent files ↗</a>
 </section>
 <footer><a href="./">← Back to device setup</a> · BOTROL by Terminal Joint</footer>
 </main>
 <script>
-const API="https://botrol-cloud.onrender.com";
-const DEVICE="BOTROL-ESP32-001";
-const healthButton=document.getElementById("health"),sendButton=document.getElementById("sendPing"),clearButton=document.getElementById("clear"),tokenInput=document.getElementById("adminToken"),healthStatus=document.getElementById("healthStatus"),commandStatus=document.getElementById("commandStatus");
+const API="https://botrol-cloud.onrender.com",DEVICE="BOTROL-ESP32-001",DESKTOP="BOTROL-DESKTOP-001";
+const $=id=>document.getElementById(id);
 function show(el,message,type=""){el.textContent=message;el.className="status"+(type?" "+type:"");}
-healthButton.addEventListener("click",async()=>{healthButton.disabled=true;show(healthStatus,"Contacting BOTROL Cloud...");try{const r=await fetch(API+"/health");const data=await r.json();if(!r.ok)throw new Error("HTTP "+r.status);show(healthStatus,"CONNECTED · "+data.service+" · "+data.status+" · v"+data.version,"good");}catch(e){show(healthStatus,"Could not reach BOTROL Cloud: "+e.message,"bad");}finally{healthButton.disabled=false;}});
-sendButton.addEventListener("click",async()=>{const token=tokenInput.value.trim();if(!token){show(commandStatus,"Enter your BOTROL_ADMIN_TOKEN first.","bad");tokenInput.focus();return;}sendButton.disabled=true;show(commandStatus,"Sending ping command to BOTROL Cloud...");try{const r=await fetch(API+"/api/v1/admin/commands",{method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({device_id:DEVICE,command:"ping"})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||("HTTP "+r.status));const id=data.command?.command_id||"accepted";show(commandStatus,"COMMAND QUEUED ✓\nDevice: "+DEVICE+"\nCommand: ping\nID: "+id+"\n\nYour ESP32 should receive it on its next poll. Check Arduino Serial Monitor for PING received, PONG, and a successful result report.","good");}catch(e){show(commandStatus,"Command failed: "+e.message+"\nCheck the token, cloud status, and device registration.","bad");}finally{tokenInput.value="";sendButton.disabled=false;}}); 
-clearButton.addEventListener("click",()=>{tokenInput.value="";show(commandStatus,"Admin token cleared. Ready for the next command.");});
+$("health").addEventListener("click",async()=>{const b=$("health");b.disabled=true;show($("healthStatus"),"Contacting BOTROL Cloud...");try{const r=await fetch(API+"/health");const d=await r.json();if(!r.ok)throw new Error("HTTP "+r.status);show($("healthStatus"),"CONNECTED · "+d.service+" · "+d.status+" · v"+d.version,"good");}catch(e){show($("healthStatus"),"Cloud connection failed: "+e.message,"bad");}finally{b.disabled=false;}});
+async function send(path,body,statusElement,button,message){const token=$("adminToken").value.trim();if(!token){show(statusElement,"Enter your BOTROL_ADMIN_TOKEN first.","bad");$("adminToken").focus();return;}button.disabled=true;show(statusElement,"Sending command to BOTROL Cloud...");try{const r=await fetch(API+path,{method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||("HTTP "+r.status));show(statusElement,"COMMAND QUEUED ✓\n"+message+"\nCommand ID: "+(d.command?.command_id||"accepted")+"\n\nThe target agent should receive it on its next poll. Check its terminal for the execution result.","good");}catch(e){show(statusElement,"Command failed: "+e.message,"bad");}finally{$("adminToken").value="";button.disabled=false;}}
+$("sendPing").addEventListener("click",e=>send("/api/v1/admin/commands",{device_id:DEVICE,command:"ping"},$("deviceStatus"),e.currentTarget,"Target: "+DEVICE+"\nCommand: ping"));
+document.querySelectorAll("[data-command]").forEach(button=>button.addEventListener("click",e=>{const name=e.currentTarget.dataset.command;send("/api/v1/admin/desktop-commands",{desktop_id:DESKTOP,command:name},$("desktopStatus"),e.currentTarget,"Target: "+DESKTOP+"\nCommand: "+name);}));
 </script></body></html>
