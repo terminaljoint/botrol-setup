@@ -10,8 +10,6 @@ services:
     envVars:
       - key: BOTROL_DEVICE_TOKEN
         generateValue: true
-      - key: BOTROL_DESKTOP_TOKEN
-        generateValue: true
       - key: BOTROL_ADMIN_TOKEN
         generateValue: true
       - key: BOTROL_ALLOWED_ORIGINS
