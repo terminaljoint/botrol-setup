@@ -1,40 +1,46 @@
 # BOTROL Cloud API
 
-Minimal FastAPI relay for the BOTROL ESP32 prototype.
+FastAPI relay for BOTROL ESP32 devices and desktop agents.
 
-## Current prototype scope
+## Routes
 
-- Health check: `GET /health`
-- Device registration: `POST /api/v1/devices/register`
-- Fetch next command: `GET /api/v1/devices/{device_id}/commands/next`
-- Report command result: `POST /api/v1/devices/{device_id}/commands/{command_id}/result`
-- Queue a test command: `POST /api/v1/admin/commands`
+- `GET /health`: service health
+- `POST /api/v1/devices/register`: register ESP32 (device token)
+- `GET /api/v1/devices/{device_id}/commands/next`: ESP32 command polling (device token)
+- `POST /api/v1/devices/{device_id}/commands/{command_id}/result`: ESP32 result (device token)
+- `POST /api/v1/admin/commands`: enqueue ESP32 `ping` (admin token)
+- `POST /api/v1/desktops/register`: register desktop agent (desktop token)
+- `GET /api/v1/desktops/{desktop_id}/commands/next`: desktop command polling (desktop token)
+- `POST /api/v1/desktops/{desktop_id}/commands/{command_id}/result`: desktop result (desktop token)
+- `POST /api/v1/admin/desktop-commands`: enqueue an allowlisted desktop action (admin token)
 
-Only the harmless `ping` command is accepted in this milestone. This API does not execute computer actions.
+## Desktop command allowlist
 
-## Deploy on Render
+Only `open_notepad` and `open_calculator` are accepted. The cloud API only queues these identifiers. The desktop agent maps them to fixed local application launches. It does not run shell commands or arbitrary scripts.
 
-1. Create a new Web Service from this GitHub repository.
-2. Set the Root Directory to `backend`.
-3. Build command: `pip install -r requirements.txt`
-4. Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-5. Add environment variables:
-   - `BOTROL_DEVICE_TOKEN`: a long random secret shared with the ESP32 firmware.
-   - `BOTROL_ADMIN_TOKEN`: a separate long random secret for command submission.
-   - `BOTROL_ALLOWED_ORIGINS`: `https://botrol-setup.vercel.app`
+## Render environment variables
 
-The included `render.yaml` supplies these settings and asks Render to generate both secrets. Never commit real tokens to GitHub or put them in the public website.
+- `BOTROL_DEVICE_TOKEN`: separate secret used by the ESP32 firmware.
+- `BOTROL_DESKTOP_TOKEN`: separate secret used by the desktop agent.
+- `BOTROL_ADMIN_TOKEN`: secret used by the command dashboard to enqueue commands.
+- `BOTROL_ALLOWED_ORIGINS`: `https://botrol-setup.vercel.app`
 
-## Important prototype limitation
+The Render blueprint asks Render to generate all three secrets. If the service already exists, ensure `BOTROL_DESKTOP_TOKEN` is added under Render → Environment. Never commit real tokens or put them in public source code.
 
-Device records and command queues are stored in memory. They disappear when the service restarts or sleeps. This is for connectivity testing only. Before relying on BOTROL, replace this storage with a persistent database/queue and add per-device credentials, expiry, replay protection, and stronger audit logging.
+## Deploy
+
+The Render service uses Root Directory `backend`, build command `pip install -r requirements.txt`, and start command `uvicorn main:app --host 0.0.0.0 --port $PORT`.
+
+## Prototype limitations
+
+Device/desktop records and command queues are stored in memory. They disappear when the service restarts or sleeps. This is a connectivity prototype, not a reliable production command system. Before broader use, add persistent storage, per-device credential management, command expiry, replay protection, rate limits, audit logging, and stronger transport/device security.
 
 ## Local run
 
-Install dependencies, set both secret environment variables, then run:
+Install dependencies, set the three token environment variables, then run:
 
 ```bash
 uvicorn main:app --reload
 ```
 
-Open `/docs` on the local server to inspect and test the API.
+Open `/docs` on the local server to inspect the API.
