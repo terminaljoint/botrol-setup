@@ -19,12 +19,13 @@
 <div class="status" id="healthStatus" role="status" aria-live="polite">Cloud status has not been checked yet.</div>
 </section>
 <section class="panel">
-<h2>Windows voice hotkey</h2>
-<p class="hint">Download and run the BOTROL Windows app. Press Win + J anywhere in Windows to open the local browser voice panel and start listening. Your transcript appears live. Stop, review it, then execute it. No Python installation needed.</p>
+<h2>Windows voice agent</h2>
+<p class="hint">Use the official batch launcher instead of the unsigned EXE. It installs the open-source Python agent in your user profile and starts it in a visible console.</p>
 <div class="row">
-<a class="btn" href="https://github.com/TerminalJoint/botrol-setup/releases/download/desktop-agent-latest/BOTROL-Voice-Agent.exe">Download BOTROL for Windows (.exe)</a>
+<a class="btn" href="https://raw.githubusercontent.com/TerminalJoint/botrol-setup/main/desktop-agent/Start-BOTROL.bat" download="Start-BOTROL.bat">Download BOTROL launcher (.bat)</a>
+<a class="btn secondary" href="https://github.com/TerminalJoint/botrol-setup/tree/main/desktop-agent">Inspect source</a>
 </div>
-<div class="notice">First launch asks for your admin token once and stores it in Windows Credential Manager. Keep the app window running. Press Win + J to start. Use current Chrome or Edge and allow microphone access. Browser speech recognition may send audio to its speech service. This build is not code-signed, so Windows Smart App Control may still block it.</div>
+<div class="notice">After downloading, open Start-BOTROL.bat yourself. A browser cannot execute downloaded files automatically. Requires Python 3.10+, Chrome or Edge, microphone and internet. First launch asks for your BOTROL admin token and stores it in Windows Credential Manager. Keep the console running, then press Win + J. No Windows security features are disabled.</div>
 </section>
 <section class="panel">
 <h2>ESP32 connection</h2><div class="hint">Target device: <strong>BOTROL-ESP32-001</strong></div>
