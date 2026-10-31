@@ -142,12 +142,12 @@ def main():
                 print("\n✗", exc)
             finally:
                 busy.release()
-                print("\nReady. Press Win + Alt + Space to speak.")
+                print("\nReady. Press Win + Ctrl + Alt + B to speak.")
         threading.Thread(target=worker, daemon=True).start()
 
     user32 = ctypes.windll.user32
     if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_WIN | MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_B):
-        raise RuntimeError("Could not register Win + Alt + Space. Another application may already use it.")
+        raise RuntimeError("Could not register Win + Ctrl + Alt + B. Another application may already use it.")
     try:
         msg = wintypes.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
