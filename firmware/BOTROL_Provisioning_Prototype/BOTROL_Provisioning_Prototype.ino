@@ -13,7 +13,7 @@ static const char* BOTROL_SERVER = "https://botrol-cloud.onrender.com";
 static const char* DEVICE_ID = "BOTROL-ESP32-001";
 static const char* FIRMWARE_VERSION = "0.4.0";
 static const uint32_t SERIAL_BAUD = 115200;
-static const uint32_t WIFI_TIMEOUT_MS = 20000;
+static const uint32_t WIFI_TIMEOUT_MS = 25000;
 static const uint32_t REGISTER_RETRY_MS = 30000;
 static const uint32_t POLL_INTERVAL_MS = 5000;
 
@@ -159,10 +159,24 @@ void pollCloud() {
   commandInProgress = false;
 }
 
+const char* wifiStatusName(wl_status_t status) {
+  switch (status) {
+    case WL_CONNECTED: return "connected";
+    case WL_NO_SSID_AVAIL: return "network_not_found";
+    case WL_CONNECT_FAILED: return "authentication_or_connection_failed";
+    case WL_CONNECTION_LOST: return "connection_lost";
+    case WL_DISCONNECTED: return "disconnected";
+    case WL_IDLE_STATUS: return "idle";
+    default: return "unknown";
+  }
+}
+
 void beginWifiAttempt(const String& ssid, const String& password, WifiAttempt kind) {
   WiFi.disconnect(false, false);
-  delay(100);
+  delay(150);
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
   WiFi.begin(ssid.c_str(), password.c_str());
   wifiAttempt = kind;
   wifiAttemptAt = millis();
@@ -254,9 +268,12 @@ void handleWifiState() {
     publishStatus("restoring", "New Wi-Fi failed; restoring previous network");
     beginWifiAttempt(restoreSsid, restorePassword, WIFI_RESTORE);
   } else {
+    const String reason = String("Wi-Fi failed: ") + wifiStatusName(WiFi.status()) +
+                          " (status " + String((int)WiFi.status()) +
+                          "). ESP32 requires 2.4 GHz Wi-Fi; check SSID/password and WPA2 compatibility.";
     WiFi.disconnect(false, false);
     wifiAttempt = WIFI_IDLE;
-    publishStatus("wifi_failed", "Connection failed; check credentials and retry");
+    publishStatus("wifi_failed", reason.c_str());
   }
 }
 
