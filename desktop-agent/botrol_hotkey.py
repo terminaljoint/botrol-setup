@@ -122,11 +122,22 @@ def main():
     print("Language: choose Tamil or English in the voice panel.")
     print("First use: allow microphone access in Chrome/Edge. Keep this window open.")
 
-    def open_voice_panel():
-        print("[BOTROL] Win + J pressed. Opening voice panel...")
-        webbrowser.open(url)
+    # keyboard.add_hotkey can fire repeatedly while a key combination is held
+    # or repeated by the OS. Debounce launches so one press opens one panel.
+    launch_lock = threading.Lock()
+    last_launch = 0.0
 
-    keyboard.add_hotkey("windows+j", open_voice_panel, suppress=False)
+    def open_voice_panel():
+        nonlocal last_launch
+        with launch_lock:
+            now = time.monotonic()
+            if now - last_launch < 2.0:
+                return
+            last_launch = now
+        print("[BOTROL] Win + J pressed. Opening voice panel...")
+        webbrowser.open(url, new=0)
+
+    keyboard.add_hotkey("windows+j", open_voice_panel, suppress=False, trigger_on_release=True)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         while True:
