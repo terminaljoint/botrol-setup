@@ -15,6 +15,7 @@ static const char* FIRMWARE_VERSION = "0.4.0";
 static const uint32_t SERIAL_BAUD = 115200;
 static const uint32_t WIFI_TIMEOUT_MS = 20000;
 static const uint32_t REGISTER_RETRY_MS = 5000;
+static const uint32_t WIFI_RETRY_MS = 5000;
 static const uint32_t POLL_INTERVAL_MS = 1000;
 
 HijelHID_BLEKeyboard keyboard(DEVICE_NAME);
@@ -28,6 +29,7 @@ String serialLine;
 enum WifiAttempt { WIFI_IDLE, WIFI_CANDIDATE, WIFI_RESTORE };
 WifiAttempt wifiAttempt = WIFI_IDLE;
 uint32_t wifiAttemptAt = 0;
+uint32_t nextWifiRetryAt = 0;
 uint32_t lastRegisterAt = 0;
 uint32_t lastPollAt = 0;
 uint8_t consecutivePollFailures = 0;
@@ -66,7 +68,7 @@ bool httpsRequest(const char* method, const String& path, const String& body, St
   const String url = String(BOTROL_SERVER) + path;
   if (!http.begin(secureClient, url)) { lastCloudHttpStatus = -1000; return false; }
 
-  http.setTimeout(10000);
+  http.setTimeout(6000);
   http.addHeader("Authorization", "Bearer " + deviceToken);
   http.addHeader("Content-Type", "application/json");
 
@@ -172,11 +174,13 @@ void pollCloud() {
     publishStatus("cloud_poll_failed", (String("Cloud poll HTTP status: ") + String(lastCloudHttpStatus) +
       ". Consecutive failures: " + String(consecutivePollFailures) + "/3.").c_str());
     // Do not drop registration because of one temporary Render/network hiccup.
-    if (consecutivePollFailures >= 5) {
-      // A poll timeout is not proof that registration was lost. Keep polling:
-      // the API can recreate volatile device presence after a Render restart.
+    if (consecutivePollFailures >= 3) {
+      // Re-register after repeated failures. The backend may have restarted,
+      // and its in-memory device registry may have been cleared.
       consecutivePollFailures = 0;
-      publishStatus("cloud_unstable", "Cloud is temporarily unreachable; continuing automatic retries.");
+      cloudRegistered = false;
+      lastRegisterAt = 0;
+      publishStatus("cloud_unstable", "Three cloud polls failed; forcing a fresh registration.");
     }
   }
   if (cloudRegistered) consecutivePollFailures = 0;
@@ -305,6 +309,7 @@ void handleWifiState() {
       publishStatus("wifi_failed_restored", "Previous Wi-Fi connection restored");
     }
     wifiAttempt = WIFI_IDLE;
+    nextWifiRetryAt = 0;
     wasWifiConnected = true;
     cloudRegistered = false;
     if (cloudCredentialsReady()) registerDevice();
@@ -318,6 +323,7 @@ void handleWifiState() {
   } else {
     WiFi.disconnect(false, false);
     wifiAttempt = WIFI_IDLE;
+    nextWifiRetryAt = millis() + WIFI_RETRY_MS;
     StaticJsonDocument<256> failure;
     failure["type"] = "status";
     failure["state"] = "wifi_failed";
@@ -379,13 +385,23 @@ void loop() {
   const bool wifiNowConnected = WiFi.status() == WL_CONNECTED;
   if (wifiNowConnected && !wasWifiConnected) {
     wasWifiConnected = true;
+    nextWifiRetryAt = 0;
     cloudRegistered = false;
     publishStatus("wifi_reconnected", "Wi-Fi restored; reconnecting to BOTROL Cloud");
     if (cloudCredentialsReady()) registerDevice();
   } else if (!wifiNowConnected && wasWifiConnected) {
     wasWifiConnected = false;
     cloudRegistered = false;
-    publishStatus("wifi_lost", "Wi-Fi connection lost; waiting for automatic reconnect");
+    nextWifiRetryAt = millis() + WIFI_RETRY_MS;
+    publishStatus("wifi_lost", "Wi-Fi connection lost; automatic reconnection will start");
+  }
+
+  // A failed initial connection or a later Wi-Fi drop must not leave the
+  // device offline forever. Reuse the last successfully saved credentials.
+  if (!wifiNowConnected && wifiAttempt == WIFI_IDLE && activeSsid.length() &&
+      (nextWifiRetryAt == 0 || (int32_t)(millis() - nextWifiRetryAt) >= 0)) {
+    publishStatus("wifi_retrying", "Retrying saved Wi-Fi credentials");
+    beginWifiAttempt(activeSsid, activePassword, WIFI_CANDIDATE);
   }
 
   openSetupPage();
