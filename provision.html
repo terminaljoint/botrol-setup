@@ -51,8 +51,8 @@ function logSerial(direction,line){
   const log=$("serialLog");
   if(log.textContent==="Waiting for serial data...")log.textContent="";
   const stamp=new Date().toLocaleTimeString();
-  const entries=(log.textContent+"["+stamp+"] "+direction+": "+line+"\\n").split("\\n").filter(Boolean);
-  log.textContent=entries.slice(-100).join("\\n");
+  const entries=(log.textContent+"["+stamp+"] "+direction+": "+line+"\n").split("\n").filter(Boolean);
+  log.textContent=entries.slice(-100).join("\n");
   log.scrollTop=log.scrollHeight;
 }
 function parseLine(line){
@@ -64,9 +64,9 @@ function parseLine(line){
     const data=JSON.parse(trimmed);
     if(data.type==="status"){
       const state=typeof data.state==="string"?data.state:"unknown_state";
-      const detail=[state,data.detail,data.wifi==="connected"?"Wi-Fi: "+(data.ssid||"connected"):"Wi-Fi: disconnected",data.cloud==="registered"?"Cloud: registered":"Cloud: not registered"].filter(Boolean).join("\\n");
+      const detail=[state,data.detail,data.wifi==="connected"?"Wi-Fi: "+(data.ssid||"connected"):"Wi-Fi: disconnected",data.cloud==="registered"?"Cloud: registered":"Cloud: not registered"].filter(Boolean).join("\n");
       if(state==="device_status"||state.startsWith("wifi_")||state==="setup_required"||state==="wifi_reconnecting"||state==="connecting"||state==="credentials_received"||state==="restoring"){
-        show($("wifiCurrent"),data.wifi==="connected"?"Connected to: "+(data.ssid||"Unknown network")+"\\nStatus: Connected":"Not connected to Wi-Fi"+(data.detail?"\\n"+data.detail:""),data.wifi==="connected"?"good":"");
+        show($("wifiCurrent"),data.wifi==="connected"?"Connected to: "+(data.ssid||"Unknown network")+"\nStatus: Connected":"Not connected to Wi-Fi"+(data.detail?"\n"+data.detail:""),data.wifi==="connected"?"good":"");
       }
       if(state.startsWith("cloud_")||state==="command_completed")show($("cloudStatus"),detail,state==="cloud_registered"?"good":state==="cloud_registration_failed"?"bad":"");
       const kind=["wifi_connected","usb_ready","setup_required"].includes(state)?"good":["error","wifi_failed"].includes(state)?"bad":"";
