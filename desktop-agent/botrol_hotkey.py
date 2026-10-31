@@ -9,6 +9,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
 
 from ctypes import wintypes
 
@@ -91,8 +92,16 @@ def main():
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            if self.path != "/":
-                self.send_error(404); return
+            # self.path includes the query string (for example /?listen=1).
+            # Route using only the URL path so the auto-listen query works.
+            path = urlsplit(self.path).path
+            if path == "/favicon.ico":
+                self.send_response(204)
+                self.end_headers()
+                return
+            if path != "/":
+                self.send_error(404)
+                return
             body = PAGE.encode("utf-8")
             self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
