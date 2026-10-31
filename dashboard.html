@@ -20,11 +20,11 @@
 </section>
 <section class="panel">
 <h2>Windows voice hotkey</h2>
-<p class="hint">Download the Windows helper once. Press <strong>Win + Ctrl + Alt + B</strong> anywhere to speak a task. No Space key and no always-on microphone.</p>
+<p class="hint">Download the standalone Windows app. Press <strong>Win + Ctrl + Alt + B</strong> anywhere to speak a task. No BAT launcher or Python installation needed.</p>
 <div class="row">
-<a class="btn" href="./downloads/windows/BOTROL.exe" download>Download BOTROL for Windows (.exe)</a>
+<a class="btn" href="https://github.com/TerminalJoint/botrol-setup/releases/download/desktop-agent-latest/BOTROL-Voice-Agent.exe">Download BOTROL for Windows (.exe)</a>
 </div>
-<div class="notice">Native Windows executable. First run asks for your admin token once and stores it encrypted for your Windows account. Keep the BOTROL window open. Requires a microphone and an installed Windows speech recognizer. Hotkey: Win + Ctrl + Alt + B. Ctrl + C exits. This initial build is unsigned, so Windows Smart App Control may still block it. A trusted code-signing certificate is needed to establish publisher trust.</div>
+<div class="notice">First launch asks for your admin token once and stores it in Windows Credential Manager. Keep the app window running. Requires a microphone and internet access. Speech audio is sent to Google's speech recognition service. This build is not code-signed, so Windows Smart App Control may still block it. A trusted signing certificate is needed to remove that warning reliably.</div>
 </section>
 <section class="panel">
 <h2>Voice & AI tasks</h2>
