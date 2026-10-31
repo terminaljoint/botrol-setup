@@ -68,8 +68,8 @@ def db_connect():
     if not DATABASE_URL:
         raise HTTPException(status_code=503, detail="Persistent database is not configured. Set DATABASE_URL in Render.")
     try:
-        conn = psycopg.connect(DATABASE_URL, connect_timeout=10, sslmode="require", row_factory=dict_row)
-        conn.execute(SCHEMA_SQL)
+        conn = psycopg.connect(DATABASE_URL, connect_timeout=10, sslmode="require", row_factory=dict_row, prepare_threshold=None)
+        conn.execute(SCHEMA_SQL, prepare=False)
         return conn
     except HTTPException:
         raise
