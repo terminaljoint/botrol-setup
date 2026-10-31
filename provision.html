@@ -72,13 +72,17 @@ function parseLine(line){
       return;
     }
     if(data.type==="wifi_scan_complete"){
-      show($("networkList"),scannedNetworks.length?("Found "+scannedNetworks.length+" network(s). Select one to fill its name."):"No networks found. Check that the router broadcasts 2.4 GHz Wi-Fi.",scannedNetworks.length?"good":"bad");
-      renderNetworks();
+      if(scannedNetworks.length){
+        renderNetworks();
+      }else{
+        show($("networkList"),"No networks found. Check that the router broadcasts 2.4 GHz Wi-Fi, then scan again.","bad");
+      }
       return;
     }
     if(data.type==="status"){
       const state=typeof data.state==="string"?data.state:"unknown_state";
-      const detail=[state,data.detail,data.wifi==="connected"?"Wi-Fi: "+(data.ssid||"connected"):"Wi-Fi: disconnected",data.cloud==="registered"?"Cloud: registered":"Cloud: not registered"].filter(Boolean).join("\n");
+      const diagnostics=data.wifi_status_code!==undefined?"Wi-Fi code: "+data.wifi_status_code+(data.wifi_disconnect_reason!==undefined?" · disconnect reason: "+data.wifi_disconnect_reason:""):"";
+      const detail=[state,data.detail,diagnostics,data.wifi==="connected"?"Wi-Fi: "+(data.ssid||"connected"):"Wi-Fi: disconnected",data.cloud==="registered"?"Cloud: registered":"Cloud: not registered"].filter(Boolean).join("\n");
       if(state==="device_status"||state.startsWith("wifi_")||state==="setup_required"||state==="wifi_reconnecting"||state==="connecting"||state==="credentials_received"||state==="restoring"){
         show($("wifiCurrent"),data.wifi==="connected"?"Connected to: "+(data.ssid||"Unknown network")+"\nStatus: Connected":"Not connected to Wi-Fi"+(data.detail?"\n"+data.detail:""),data.wifi==="connected"?"good":"");
       }
@@ -157,7 +161,8 @@ async function scanWifi(){
 function renderNetworks(){
   const host=$("networkList");
   host.textContent="";
-  if(!scannedNetworks.length){host.textContent="Waiting for scan results...";return;}
+  const summary=document.createElement("div");summary.className="muted";summary.textContent="Found "+scannedNetworks.length+" network(s). Select one to fill its name.";host.append(summary);
+  if(!scannedNetworks.length)return;
   scannedNetworks.sort((a,b)=>b.rssi-a.rssi);
   for(const network of scannedNetworks){
     const row=document.createElement("div");row.className="network";
