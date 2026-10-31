@@ -17,6 +17,10 @@
 <p class="muted">Connect the ESP32 to this computer with a USB data cable. Click below and select its serial port, usually shown as Silicon Labs CP210x or USB Serial Device.</p>
 <div class="row"><button id="connect">Choose ESP32 port</button><button class="secondary" id="disconnect" disabled>Disconnect</button></div>
 <div class="status" id="connection">Not connected · Chrome or Edge required</div>
+<h2 style="margin-top:18px">Live USB serial log</h2>
+<p class="muted">Raw messages received from the ESP32 appear here, including non-JSON diagnostics. Wi-Fi passwords and device tokens are never written to this log.</p>
+<div class="row"><button class="secondary" id="clearLog" type="button">Clear log</button></div>
+<pre class="status" id="serialLog" aria-live="polite" style="min-height:110px;max-height:260px;overflow:auto;font:12px/1.5 ui-monospace,Consolas,monospace">Waiting for serial data...</pre>
 </section>
 <section class="panel">
 <h2>2 · Wi-Fi connection</h2>
@@ -43,21 +47,32 @@
 const $=id=>document.getElementById(id);
 let port=null,reader=null,writer=null,readTask=null,connected=false,rxBuffer="";
 function show(el,message,kind=""){el.textContent=message;el.className="status"+(kind?" "+kind:"")}
+function logSerial(direction,line){
+  const log=$("serialLog");
+  if(log.textContent==="Waiting for serial data...")log.textContent="";
+  const stamp=new Date().toLocaleTimeString();
+  const entries=(log.textContent+"["+stamp+"] "+direction+": "+line+"\\n").split("\\n").filter(Boolean);
+  log.textContent=entries.slice(-100).join("\\n");
+  log.scrollTop=log.scrollHeight;
+}
 function parseLine(line){
   const trimmed=line.trim();
+  if(!trimmed)return;
+  logSerial("ESP32",trimmed);
   if(!trimmed.startsWith("{"))return;
   try{
     const data=JSON.parse(trimmed);
     if(data.type==="status"){
-      const detail=[data.state,data.detail,data.wifi==="connected"?"Wi-Fi: "+(data.ssid||"connected"):"Wi-Fi: disconnected",data.cloud==="registered"?"Cloud: registered":"Cloud: not registered"].filter(Boolean).join("\n");
-      if(data.state==="device_status"||data.state.startsWith("wifi_")||data.state==="setup_required"||data.state==="wifi_reconnecting"){
-        show($("wifiCurrent"),data.wifi==="connected"?"Connected to: "+(data.ssid||"Unknown network")+"\nStatus: Connected":"Not connected to Wi-Fi"+(data.detail?"\n"+data.detail:""),data.wifi==="connected"?"good":"");
+      const state=typeof data.state==="string"?data.state:"unknown_state";
+      const detail=[state,data.detail,data.wifi==="connected"?"Wi-Fi: "+(data.ssid||"connected"):"Wi-Fi: disconnected",data.cloud==="registered"?"Cloud: registered":"Cloud: not registered"].filter(Boolean).join("\\n");
+      if(state==="device_status"||state.startsWith("wifi_")||state==="setup_required"||state==="wifi_reconnecting"||state==="connecting"||state==="credentials_received"||state==="restoring"){
+        show($("wifiCurrent"),data.wifi==="connected"?"Connected to: "+(data.ssid||"Unknown network")+"\\nStatus: Connected":"Not connected to Wi-Fi"+(data.detail?"\\n"+data.detail:""),data.wifi==="connected"?"good":"");
       }
-      if(data.state.startsWith("cloud_")||data.state==="command_completed")show($("cloudStatus"),detail,data.state==="cloud_registered"?"good":data.state==="cloud_registration_failed"?"bad":"");
-      const kind=["wifi_connected","usb_ready","setup_required"].includes(data.state)?"good":["error","wifi_failed"].includes(data.state)?"bad":"";
+      if(state.startsWith("cloud_")||state==="command_completed")show($("cloudStatus"),detail,state==="cloud_registered"?"good":state==="cloud_registration_failed"?"bad":"");
+      const kind=["wifi_connected","usb_ready","setup_required"].includes(state)?"good":["error","wifi_failed"].includes(state)?"bad":"";
       show($("deviceStatus"),detail,kind);
     }
-  }catch{}
+  }catch(error){logSerial("PARSER","Invalid JSON received: "+error.message)}
 }
 async function readLoop(){
   try{
@@ -70,7 +85,7 @@ async function readLoop(){
         parseLine(rxBuffer.slice(0,newline));
         rxBuffer=rxBuffer.slice(newline+1);
       }
-      if(rxBuffer.length>2048)rxBuffer="";
+      if(rxBuffer.length>2048){logSerial("PARSER","Discarded oversized serial line ("+rxBuffer.length+" characters)");rxBuffer="";}
     }
   }catch(error){
     if(connected)show($("connection"),"USB read error: "+error.message,"bad");
@@ -89,6 +104,8 @@ async function connect(){
     writer=port.writable.getWriter();
     $("disconnect").disabled=false;
     $("send").disabled=false; $("saveToken").disabled=false; $("refreshWifi").disabled=false;
+    $("serialLog").textContent="";
+    logSerial("BROWSER","USB serial connected at 115200 baud");
     show($("connection"),"USB serial connected at 115200 baud. Waiting for BOTROL...","good");
     show($("deviceStatus"),"Listening for ESP32 status...");
     readTask=readLoop();
@@ -111,7 +128,7 @@ async function disconnect(){
 }
 async function requestWifiStatus(){
   if(!connected||!writer)return;
-  try{await writer.write(new TextEncoder().encode(JSON.stringify({type:"get_status"})+"\n"));}
+  try{await writer.write(new TextEncoder().encode(JSON.stringify({type:"get_status"})+"\n"));logSerial("BROWSER","Sent get_status request");}
   catch(error){show($("wifiCurrent"),"Could not request Wi-Fi status: "+error.message,"bad");}
 }
 async function sendConfig(){
@@ -123,6 +140,7 @@ async function sendConfig(){
   try{
     const command=JSON.stringify({type:"wifi_config",ssid,password})+"\n";
     await writer.write(new TextEncoder().encode(command));
+    logSerial("BROWSER","Sent wifi_config (SSID length "+ssid.length+", password length "+password.length+"; values hidden)");
     $("password").value="";
     show($("deviceStatus"),"Configuration sent over USB. Waiting for Wi-Fi connection result...");
   }catch(error){show($("deviceStatus"),"Could not send configuration: "+error.message,"bad")}
@@ -136,11 +154,13 @@ async function saveToken(){
  try{
   const command=JSON.stringify({type:"cloud_config",device_token:token})+"\n";
   await writer.write(new TextEncoder().encode(command));
+  logSerial("BROWSER","Sent cloud_config (token hidden)");
   $("deviceToken").value="";
   show($("cloudStatus"),"Token sent over USB. Waiting for cloud registration...");
  }catch(error){show($("cloudStatus"),"Could not send token: "+error.message,"bad")}
  finally{$("saveToken").disabled=!connected}
 }
+$("clearLog").addEventListener("click",()=>{$("serialLog").textContent="Log cleared.";});
 $("connect").addEventListener("click",connect);
 $("disconnect").addEventListener("click",disconnect);
 $("refreshWifi").addEventListener("click",requestWifiStatus);
