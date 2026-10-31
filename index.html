@@ -29,7 +29,7 @@
 </div>
 <div class="progress" aria-label="Setup progress"><div class="step active" id="p1"><b>01 · Select</b>Choose your OS</div><div class="step" id="p2"><b>02 · Pair</b>Connect Bluetooth</div><div class="step" id="p3"><b>03 · Confirm</b>Finish this step</div></div>
 <section class="instructions" aria-live="polite"><h3 id="instruction-title">2. Pair your BOTROL device</h3><ol id="instruction-list"><li>Choose your operating system above.</li><li>Turn on Bluetooth on your computer.</li><li>Open Bluetooth settings and look for <strong>BOTROL</strong>.</li></ol>
-<div class="actions"><a class="action" id="settings-link" href="#" hidden>Open Bluetooth settings ↗</a><button class="action secondary" id="paired-button">I've paired BOTROL</button></div></section>
+<div class="actions"><a class="action" href="./provision.html">Configure / change Wi-Fi ↗</a><a class="action" id="settings-link" href="#" hidden>Open Bluetooth settings ↗</a><button class="action secondary" id="paired-button">I've paired BOTROL</button></div></section>
 <div class="status" id="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><div><strong id="status-title">Waiting for setup confirmation</strong><p id="status-copy">Pair BOTROL in your computer's Bluetooth settings, then confirm here.</p></div></div>
 <p class="note">This page cannot directly detect a Bluetooth HID pairing. The status changes when you confirm pairing. Browser-based device communication is a separate feature and is not enabled yet.</p>
 </section>
@@ -45,7 +45,7 @@
 <div class="actions"><a class="action" href="https://raw.githubusercontent.com/TerminalJoint/botrol-setup/main/desktop-agent/Start-BOTROL.bat" download="Start-BOTROL.bat">Download Windows launcher ↓</a><a class="action secondary" href="https://github.com/TerminalJoint/botrol-setup/tree/main/desktop-agent">View source & instructions ↗</a></div>
 <p class="note">Requires Windows 10/11, Python 3.10+, microphone and internet. Speech is transcribed by Google's speech recognition service. BOTROL task parsing itself uses no AI API. The downloaded script is open source and can be inspected before running.</p>
 </section>
-\n<footer><span>BOTROL · A Terminal Joint project</span><span><a href="https://terminaljoint.github.io/botrol-setup/">BOTROL Setup</a> · <a href="./dashboard.html">Open Command Center ↗</a></span></footer>
+\n<footer><span>BOTROL · A Terminal Joint project</span><span><a href="./provision.html">Wi-Fi setup ↗</a> · <a href="./dashboard.html">Open Command Center ↗</a></span></footer>
 </main>
 <script>
 const buttons=[...document.querySelectorAll("[data-os]")],detected=document.getElementById("detected"),list=document.getElementById("instruction-list"),title=document.getElementById("instruction-title"),link=document.getElementById("settings-link"),confirmButton=document.getElementById("paired-button"),status=document.getElementById("status"),statusTitle=document.getElementById("status-title"),statusCopy=document.getElementById("status-copy");let selected="";
