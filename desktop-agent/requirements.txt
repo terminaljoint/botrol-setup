@@ -1,0 +1,4 @@
+numpy>=1.26,<3
+sounddevice>=0.4.6
+SpeechRecognition>=3.10
+keyring>=25
