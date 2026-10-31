@@ -11,7 +11,7 @@
 <body><main class="wrap">
 <header>BOTROL / TERMINAL JOINT</header>
 <h1>Connect your <span>device.</span></h1>
-<p class="muted">Configure Wi-Fi and cloud authentication directly over USB. Secrets are stored on the ESP32 and are not uploaded as configuration data to BOTROL Cloud.</p>
+<p class="muted">View the ESP32's current Wi-Fi connection and change networks whenever needed. Configuration travels directly over USB; Wi-Fi credentials stay on the ESP32.</p>
 <section class="panel">
 <h2>1 · Connect ESP32 over USB</h2>
 <p class="muted">Connect the ESP32 to this computer with a USB data cable. Click below and select its serial port, usually shown as Silicon Labs CP210x or USB Serial Device.</p>
@@ -19,10 +19,13 @@
 <div class="status" id="connection">Not connected · Chrome or Edge required</div>
 </section>
 <section class="panel">
-<h2>2 · Configure Wi-Fi</h2>
+<h2>2 · Wi-Fi connection</h2>
+<p class="muted">Connect the ESP32 over USB, then check its current network. To switch networks, enter the new Wi-Fi details below and save. BOTROL keeps the old credentials if the new connection fails.</p>
+<div class="row"><button class="secondary" id="refreshWifi" disabled>Refresh Wi-Fi status</button></div>
+<div class="status" id="wifiCurrent">Current Wi-Fi: waiting for ESP32 status...</div>
 <label class="field" for="ssid">Wi-Fi network name (SSID)</label><input id="ssid" maxlength="32" autocomplete="off" placeholder="Your Wi-Fi name">
 <label class="field" for="password">Wi-Fi password</label><input id="password" maxlength="63" type="password" autocomplete="new-password" placeholder="Password">
-<div class="row"><button id="send" disabled>Save and connect</button></div>
+<div class="row"><button id="send" disabled>Save and connect to this Wi-Fi</button></div>
 <div class="status" id="deviceStatus">Waiting for ESP32 USB connection</div>
 <div class="notice">Wi-Fi credentials are sent directly over USB and saved in ESP32 NVS only after a successful connection.</div>
 </section>
@@ -46,7 +49,10 @@ function parseLine(line){
   try{
     const data=JSON.parse(trimmed);
     if(data.type==="status"){
-      const detail=[data.state,data.detail,data.wifi==="connected"?"Wi-Fi: "+(data.ssid||"connected"):"",data.cloud==="registered"?"Cloud: registered":""].filter(Boolean).join("\n");
+      const detail=[data.state,data.detail,data.wifi==="connected"?"Wi-Fi: "+(data.ssid||"connected"):"Wi-Fi: disconnected",data.cloud==="registered"?"Cloud: registered":"Cloud: not registered"].filter(Boolean).join("\n");
+      if(data.state==="device_status"||data.state.startsWith("wifi_")||data.state==="setup_required"||data.state==="wifi_reconnecting"){
+        show($("wifiCurrent"),data.wifi==="connected"?"Connected to: "+(data.ssid||"Unknown network")+"\nStatus: Connected":"Not connected to Wi-Fi"+(data.detail?"\n"+data.detail:""),data.wifi==="connected"?"good":"");
+      }
       if(data.state.startsWith("cloud_")||data.state==="command_completed")show($("cloudStatus"),detail,data.state==="cloud_registered"?"good":data.state==="cloud_registration_failed"?"bad":"");
       const kind=["wifi_connected","usb_ready","setup_required"].includes(data.state)?"good":["error","wifi_failed"].includes(data.state)?"bad":"";
       show($("deviceStatus"),detail,kind);
@@ -82,10 +88,11 @@ async function connect(){
     reader=decoder.readable.getReader();
     writer=port.writable.getWriter();
     $("disconnect").disabled=false;
-    $("send").disabled=false; $("saveToken").disabled=false;
+    $("send").disabled=false; $("saveToken").disabled=false; $("refreshWifi").disabled=false;
     show($("connection"),"USB serial connected at 115200 baud. Waiting for BOTROL...","good");
     show($("deviceStatus"),"Listening for ESP32 status...");
     readTask=readLoop();
+    await requestWifiStatus();
   }catch(error){
     connected=false;port=null;reader=null;writer=null;
     show($("connection"),error.name==="NotFoundError"?"No serial port selected.":error.message||String(error),"bad");
@@ -101,6 +108,11 @@ async function disconnect(){
   reader=null;writer=null;port=null;
   show($("connection"),"USB serial disconnected");
   show($("deviceStatus"),"Connect the ESP32 to continue");
+}
+async function requestWifiStatus(){
+  if(!connected||!writer)return;
+  try{await writer.write(new TextEncoder().encode(JSON.stringify({type:"get_status"})+"\n"));}
+  catch(error){show($("wifiCurrent"),"Could not request Wi-Fi status: "+error.message,"bad");}
 }
 async function sendConfig(){
   const ssid=$("ssid").value.trim(),password=$("password").value;
@@ -131,6 +143,7 @@ async function saveToken(){
 }
 $("connect").addEventListener("click",connect);
 $("disconnect").addEventListener("click",disconnect);
+$("refreshWifi").addEventListener("click",requestWifiStatus);
 $("send").addEventListener("click",sendConfig);
 $("saveToken").addEventListener("click",saveToken);
 if("serial" in navigator)navigator.serial.addEventListener("disconnect",()=>{disconnect()});
