@@ -5,7 +5,7 @@
 <meta name="theme-color" content="#090d18"><title>BOTROL · Device Provisioning</title>
 <style>
 :root{color-scheme:dark;--bg:#090d18;--panel:#111a2a;--line:#293750;--text:#edf3ff;--muted:#a0aec2;--accent:#aab6ff;--good:#65e0b2;--bad:#ff8585}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 15% 0%,#29366b66,transparent 42%),var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{width:min(620px,calc(100% - 32px));margin:auto;padding:34px 0 50px}header{font-weight:850;letter-spacing:.16em;margin-bottom:38px}.panel{background:linear-gradient(155deg,#141e30f5,#0d1422f5);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 22px 70px #0004;margin:16px 0}h1{font-size:clamp(34px,7vw,48px);line-height:1.05;letter-spacing:-.05em;margin:8px 0 12px}h1 span{color:var(--accent)}h2{font-size:18px;margin:0 0 8px}.muted{color:var(--muted);font-size:13px}.field{display:block;margin:17px 0 7px;font-weight:650;font-size:13px}input{width:100%;background:#080f1d;border:1px solid var(--line);border-radius:11px;padding:13px;color:var(--text);font:inherit}button{border:1px solid #7183d8;background:#8797f4;color:#091020;border-radius:11px;padding:12px 17px;font:inherit;font-weight:750;cursor:pointer}button.secondary{background:transparent;color:var(--text);border-color:var(--line)}button:disabled{opacity:.55;cursor:wait}.row{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.status{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}.status.good{border-color:#65e0b277;color:var(--good)}.status.bad{border-color:#ff858577;color:var(--bad)}.notice{margin-top:15px;padding:13px;border-radius:11px;background:#ffd27a12;border:1px solid #ffd27a55;color:#e8d5a8;font-size:12px}a{color:var(--accent)}code{color:var(--accent)}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 15% 0%,#29366b66,transparent 42%),var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{width:min(620px,calc(100% - 32px));margin:auto;padding:34px 0 50px}header{font-weight:850;letter-spacing:.16em;margin-bottom:38px}.panel{background:linear-gradient(155deg,#141e30f5,#0d1422f5);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 22px 70px #0004;margin:16px 0}h1{font-size:clamp(34px,7vw,48px);line-height:1.05;letter-spacing:-.05em;margin:8px 0 12px}h1 span{color:var(--accent)}h2{font-size:18px;margin:0 0 8px}.muted{color:var(--muted);font-size:13px}.field{display:block;margin:17px 0 7px;font-weight:650;font-size:13px}input{width:100%;background:#080f1d;border:1px solid var(--line);border-radius:11px;padding:13px;color:var(--text);font:inherit}button{border:1px solid #7183d8;background:#8797f4;color:#091020;border-radius:11px;padding:12px 17px;font:inherit;font-weight:750;cursor:pointer}button.secondary{background:transparent;color:var(--text);border-color:var(--line)}button:disabled{opacity:.55;cursor:wait}.row{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.status{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}.status.good{border-color:#65e0b277;color:var(--good)}.status.bad{border-color:#ff858577;color:var(--bad)}.network{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}.network button{padding:7px 10px;font-size:12px}.notice{margin-top:15px;padding:13px;border-radius:11px;background:#ffd27a12;border:1px solid #ffd27a55;color:#e8d5a8;font-size:12px}a{color:var(--accent)}code{color:var(--accent)}
 </style>
 </head>
 <body><main class="wrap">
@@ -25,7 +25,7 @@
 <section class="panel">
 <h2>2 · Wi-Fi connection</h2>
 <p class="muted">Connect the ESP32 over USB, then check its current network. To switch networks, enter the new Wi-Fi details below and save. BOTROL keeps the old credentials if the new connection fails.</p>
-<div class="row"><button class="secondary" id="refreshWifi" disabled>Refresh Wi-Fi status</button></div>
+<div class="row"><button class="secondary" id="refreshWifi" disabled>Refresh Wi-Fi status</button><button class="secondary" id="scanWifi" disabled>Scan nearby networks</button></div><div class="status" id="networkList">No scan results yet.</div>
 <div class="status" id="wifiCurrent">Current Wi-Fi: waiting for ESP32 status...</div>
 <label class="field" for="ssid">Wi-Fi network name (SSID)</label><input id="ssid" maxlength="32" autocomplete="off" placeholder="Your Wi-Fi name">
 <label class="field" for="password">Wi-Fi password</label><input id="password" maxlength="63" type="password" autocomplete="new-password" placeholder="Password">
@@ -46,6 +46,7 @@
 <script>
 const $=id=>document.getElementById(id);
 let port=null,reader=null,writer=null,readTask=null,connected=false,rxBuffer="";
+let scannedNetworks=[];
 function show(el,message,kind=""){el.textContent=message;el.className="status"+(kind?" "+kind:"")}
 function logSerial(direction,line){
   const log=$("serialLog");
@@ -62,6 +63,19 @@ function parseLine(line){
   if(!trimmed.startsWith("{"))return;
   try{
     const data=JSON.parse(trimmed);
+    if(data.type==="wifi_network"){
+      const network={ssid:String(data.ssid||""),rssi:Number(data.rssi),channel:Number(data.channel),encryption:Number(data.encryption)};
+      if(network.ssid){
+        scannedNetworks.push(network);
+        renderNetworks();
+      }
+      return;
+    }
+    if(data.type==="wifi_scan_complete"){
+      show($("networkList"),scannedNetworks.length?("Found "+scannedNetworks.length+" network(s). Select one to fill its name."):"No networks found. Check that the router broadcasts 2.4 GHz Wi-Fi.",scannedNetworks.length?"good":"bad");
+      renderNetworks();
+      return;
+    }
     if(data.type==="status"){
       const state=typeof data.state==="string"?data.state:"unknown_state";
       const detail=[state,data.detail,data.wifi==="connected"?"Wi-Fi: "+(data.ssid||"connected"):"Wi-Fi: disconnected",data.cloud==="registered"?"Cloud: registered":"Cloud: not registered"].filter(Boolean).join("\n");
@@ -103,7 +117,7 @@ async function connect(){
     reader=decoder.readable.getReader();
     writer=port.writable.getWriter();
     $("disconnect").disabled=false;
-    $("send").disabled=false; $("saveToken").disabled=false; $("refreshWifi").disabled=false;
+    $("send").disabled=false; $("saveToken").disabled=false; $("refreshWifi").disabled=false; $("scanWifi").disabled=false;
     $("serialLog").textContent="";
     logSerial("BROWSER","USB serial connected at 115200 baud");
     show($("connection"),"USB serial connected at 115200 baud. Waiting for BOTROL...","good");
@@ -118,7 +132,7 @@ async function connect(){
 }
 async function disconnect(){
   connected=false;
-  $("send").disabled=true;$("saveToken").disabled=true;$("disconnect").disabled=true;$("connect").disabled=false;
+  $("send").disabled=true;$("saveToken").disabled=true;$("refreshWifi").disabled=true;$("scanWifi").disabled=true;$("disconnect").disabled=true;$("connect").disabled=false;
   try{if(reader){await reader.cancel();reader.releaseLock()}}catch{}
   try{if(writer){writer.releaseLock()}}catch{}
   try{if(port)await port.close()}catch{}
@@ -130,6 +144,29 @@ async function requestWifiStatus(){
   if(!connected||!writer)return;
   try{await writer.write(new TextEncoder().encode(JSON.stringify({type:"get_status"})+"\n"));logSerial("BROWSER","Sent get_status request");}
   catch(error){show($("wifiCurrent"),"Could not request Wi-Fi status: "+error.message,"bad");}
+}
+async function scanWifi(){
+  if(!connected||!writer)return;
+  scannedNetworks=[];
+  show($("networkList"),"Scanning nearby networks...");
+  try{
+    await writer.write(new TextEncoder().encode(JSON.stringify({type:"wifi_scan"})+"\\n"));
+    logSerial("BROWSER","Sent wifi_scan request");
+  }catch(error){show($("networkList"),"Could not start scan: "+error.message,"bad");}
+}
+function renderNetworks(){
+  const host=$("networkList");
+  host.textContent="";
+  if(!scannedNetworks.length){host.textContent="Waiting for scan results...";return;}
+  scannedNetworks.sort((a,b)=>b.rssi-a.rssi);
+  for(const network of scannedNetworks){
+    const row=document.createElement("div");row.className="network";
+    const label=document.createElement("span");
+    label.textContent=network.ssid+" · "+network.rssi+" dBm · Ch "+network.channel+" · "+(network.encryption===7?"Open":"Secured");
+    const choose=document.createElement("button");choose.type="button";choose.textContent="Select";
+    choose.addEventListener("click",()=>{$("ssid").value=network.ssid;$("password").focus();});
+    row.append(label,choose);host.append(row);
+  }
 }
 async function sendConfig(){
   const ssid=$("ssid").value.trim(),password=$("password").value;
@@ -163,7 +200,7 @@ async function saveToken(){
 $("clearLog").addEventListener("click",()=>{$("serialLog").textContent="Log cleared.";});
 $("connect").addEventListener("click",connect);
 $("disconnect").addEventListener("click",disconnect);
-$("refreshWifi").addEventListener("click",requestWifiStatus);
+$("refreshWifi").addEventListener("click",requestWifiStatus);\n$("scanWifi").addEventListener("click",scanWifi);
 $("send").addEventListener("click",sendConfig);
 $("saveToken").addEventListener("click",saveToken);
 if("serial" in navigator)navigator.serial.addEventListener("disconnect",()=>{disconnect()});
