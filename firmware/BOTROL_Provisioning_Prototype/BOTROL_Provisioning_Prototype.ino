@@ -2,6 +2,7 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
+#include <WebServer.h>
 #include <ArduinoJson.h>
 #include <HijelHID_BLEKeyboard.h>
 
@@ -20,6 +21,8 @@ static const uint32_t POLL_INTERVAL_MS = 5000;
 HijelHID_BLEKeyboard keyboard(DEVICE_NAME);
 Preferences prefs;
 WiFiClientSecure secureClient;
+WebServer setupServer(80);
+bool setupApActive = false;
 
 String activeSsid, activePassword, candidateSsid, candidatePassword;
 String restoreSsid, restorePassword, deviceToken;
@@ -274,6 +277,7 @@ void handleWifiState() {
     WiFi.disconnect(false, false);
     wifiAttempt = WIFI_IDLE;
     publishStatus("wifi_failed", reason.c_str());
+    startSetupAP();
   }
 }
 
@@ -287,6 +291,37 @@ void openSetupPage() {
   delay(250);
   keyboard.tap(KEY_RETURN);
   publishStatus("setup_page_opened", "Configure Wi-Fi and cloud token on the setup page");
+}
+
+
+void startSetupAP() {
+  if (setupApActive) return;
+  WiFi.disconnect(true, false);
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP("BOTROL-SETUP", "botrol1234");
+  setupApActive = true;
+  setupServer.on("/", HTTP_GET, []() {
+    const char page[] = "<!doctype html><html><meta name='viewport' content='width=device-width,initial-scale=1'><body style='font:18px Arial;max-width:480px;margin:35px auto;padding:16px'><h2>BOTROL Wi-Fi Setup</h2><form method='POST' action='/save'>Wi-Fi name (2.4 GHz)<br><input name='ssid' maxlength='32' required style='width:100%;padding:12px;margin:8px 0'><br>Password<br><input name='password' type='password' maxlength='63' style='width:100%;padding:12px;margin:8px 0'><br><button style='padding:12px 20px'>Connect</button></form><p>Connect to BOTROL-SETUP using password botrol1234, then open 192.168.4.1</p></body></html>";
+    setupServer.send(200, "text/html", page);
+  });
+  setupServer.on("/save", HTTP_POST, []() {
+    String ssid = setupServer.arg("ssid");
+    String password = setupServer.arg("password");
+    if (!ssid.length() || ssid.length() > 32 || password.length() > 63) {
+      setupServer.send(400, "text/plain", "Invalid Wi-Fi details");
+      return;
+    }
+    candidateSsid = ssid;
+    candidatePassword = password;
+    restoreSsid = activeSsid;
+    restorePassword = activePassword;
+    setupServer.send(200, "text/html", "<html><body style='font:18px Arial;padding:25px'>Credentials received. BOTROL is connecting. You can close this page.</body></html>");
+    beginWifiAttempt(candidateSsid, candidatePassword, WIFI_CANDIDATE);
+  });
+  setupServer.begin();
+  Serial.println("[BOTROL] Setup Wi-Fi: BOTROL-SETUP / botrol1234");
+  Serial.println("[BOTROL] Open http://192.168.4.1");
+  publishStatus("setup_ap_started", "Connect to BOTROL-SETUP, password botrol1234, then open 192.168.4.1");
 }
 
 void setup() {
@@ -314,6 +349,7 @@ void setup() {
 void loop() {
   readSerialCommands();
   handleWifiState();
+  if (setupApActive) setupServer.handleClient();
   openSetupPage();
 
   if (WiFi.status() == WL_CONNECTED && cloudCredentialsReady() && !cloudRegistered &&
