@@ -76,7 +76,7 @@ def http_json(path, token, body=None):
 
 def capture_and_transcribe():
     """Capture actual speech, stop after silence, and avoid a fixed-length empty clip."""
-    print("\\n🎙 Speak now... (BOTROL stops after you finish)")
+    print("\n🎙 Speak now... (BOTROL stops after you finish)")
     chunks = []
     started = False
     speech_elapsed = 0.0
@@ -165,7 +165,7 @@ def main():
     print("\nBOTROL is ready.")
     print("Hotkey: Win + Ctrl + Alt + V")
     print(f"Speech language: {LANGUAGE} (change BOTROL_SPEECH_LANGUAGE to ta-IN for Tamil)")
-    print("Press the hotkey, speak within 7 seconds. Press Ctrl+C to exit.")
+    print("Press the hotkey, speak after the prompt, then pause. Press Ctrl+C to exit.")
     print("Note: speech audio is sent to Google's speech recognition service for transcription.")
 
     busy = threading.Lock()
