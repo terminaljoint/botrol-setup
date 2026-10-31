@@ -30,6 +30,8 @@ WifiAttempt wifiAttempt = WIFI_IDLE;
 uint32_t wifiAttemptAt = 0;
 uint32_t lastRegisterAt = 0;
 uint32_t lastPollAt = 0;
+uint8_t consecutivePollFailures = 0;
+int lastCloudHttpStatus = 0;
 bool setupPageOpened = false;
 bool cloudRegistered = false;
 bool commandInProgress = false;
@@ -61,13 +63,14 @@ bool httpsRequest(const char* method, const String& path, const String& body, St
   // DEVELOPMENT ONLY: replace setInsecure() with trusted CA validation before production.
   secureClient.setInsecure();
   const String url = String(BOTROL_SERVER) + path;
-  if (!http.begin(secureClient, url)) return false;
+  if (!http.begin(secureClient, url)) { lastCloudHttpStatus = -1000; return false; }
 
   http.setTimeout(10000);
   http.addHeader("Authorization", "Bearer " + deviceToken);
   http.addHeader("Content-Type", "application/json");
 
   const int status = strcmp(method, "GET") == 0 ? http.GET() : http.POST(body);
+  lastCloudHttpStatus = status;
   response = status > 0 ? http.getString() : "";
   http.end();
   return status >= 200 && status < 300;
@@ -86,11 +89,12 @@ bool registerDevice() {
   const bool ok = httpsRequest("POST", "/api/v1/devices/register", body, response);
   cloudRegistered = ok;
   if (ok) {
-    Serial.println("[BOTROL] Cloud registration successful");
+    Serial.println("[BOTROL] Cloud registration successful (HTTP " + String(lastCloudHttpStatus) + ")");
+    consecutivePollFailures = 0;
     publishStatus("cloud_registered", "ESP32 registered with BOTROL Cloud");
   } else {
-    Serial.println("[BOTROL] Cloud registration failed; will retry");
-    publishStatus("cloud_registration_failed", "Check device token and BOTROL Cloud availability");
+    Serial.println("[BOTROL] Cloud registration failed (HTTP " + String(lastCloudHttpStatus) + "); will retry");
+    publishStatus("cloud_registration_failed", (String("HTTP status: ") + String(lastCloudHttpStatus) + ". 401 = token mismatch; 503 = server token missing; negative = connection/TLS error.").c_str());
   }
   return ok;
 }
@@ -103,9 +107,15 @@ void reportResult(const String& commandId, const char* status, const String& mes
   serializeJson(doc, body);
   const String path = String("/api/v1/devices/") + DEVICE_ID +
                       "/commands/" + commandId + "/result";
-  if (!httpsRequest("POST", path, body, response)) {
-    Serial.println("[BOTROL] Could not report command result");
+  bool reported = false;
+  for (int attempt = 1; attempt <= 3 && !reported; attempt++) {
+    reported = httpsRequest("POST", path, body, response);
+    if (!reported) {
+      Serial.println("[BOTROL] Result report failed (HTTP " + String(lastCloudHttpStatus) + "), attempt " + String(attempt) + "/3");
+      if (attempt < 3) delay(500 * attempt);
+    }
   }
+  if (!reported) publishStatus("command_result_report_failed", "Command ran, but cloud did not confirm its result. It may remain pending.");
 }
 
 bool openWindowsRunDialog() {
@@ -157,9 +167,17 @@ void pollCloud() {
       processCommand(doc["command"].as<JsonObject>());
     }
   } else {
-    cloudRegistered = false;
-    publishStatus("cloud_disconnected", "Cloud polling failed; registration will be retried");
+    consecutivePollFailures++;
+    publishStatus("cloud_poll_failed", (String("Cloud poll HTTP status: ") + String(lastCloudHttpStatus) +
+      ". Consecutive failures: " + String(consecutivePollFailures) + "/3.").c_str());
+    // Do not drop registration because of one temporary Render/network hiccup.
+    if (consecutivePollFailures >= 3) {
+      cloudRegistered = false;
+      consecutivePollFailures = 0;
+      publishStatus("cloud_disconnected", "Three cloud polls failed; registration will be retried.");
+    }
   }
+  if (cloudRegistered) consecutivePollFailures = 0;
   commandInProgress = false;
 }
 
