@@ -75,90 +75,39 @@ def http_json(path, token, body=None):
 
 
 def capture_and_transcribe():
-    """Record from the Windows default microphone at its native sample rate."""
-    print("\\n🎙 Speak now... (BOTROL stops after you finish)")
-    device = sd.default.device[0]
-    if device is None or int(device) < 0:
-        raise RuntimeError("Windows has no default input microphone. Select one in Settings > System > Sound > Input.")
-
-    info = sd.query_devices(device, "input")
-    native_rate = int(info["default_samplerate"])
-    if int(info["max_input_channels"]) < 1:
-        raise RuntimeError("The selected default audio device has no microphone input.")
-
-    channels = 1
-    block_frames = max(256, int(native_rate * BLOCK_SECONDS))
-    chunks = []
-    started = False
-    speech_elapsed = 0.0
-    silence_elapsed = 0.0
-    noise_samples = []
-
+    print("\n🎙 Recording for 8 seconds. Speak now...")
     try:
-        # Many Windows microphone drivers do not support 16 kHz capture directly.
-        # Capture at the device's native rate, then resample for Google recognition.
-        with sd.InputStream(device=device, samplerate=native_rate, channels=channels,
-                            dtype="float32", blocksize=block_frames) as stream:
-            deadline = time.monotonic() + WAIT_FOR_SPEECH_SECONDS
-            while time.monotonic() < deadline and not started:
-                block, overflowed = stream.read(block_frames)
-                level = float(np.sqrt(np.mean(np.square(block))))
-                noise_samples.append(level)
-                ambient = float(np.median(noise_samples[-12:]))
-                threshold = max(0.004, ambient * 2.5)
-                if level >= threshold:
-                    started = True
-                    chunks.append(block.copy())
-                    speech_elapsed += len(block) / native_rate
+        device = sd.default.device[0]
+        if device is None or int(device) < 0:
+            raise RuntimeError("No default microphone selected in Windows Sound settings.")
+        info = sd.query_devices(device, "input")
+        rate = int(info["default_samplerate"])
+        print(f"Microphone: {info['name']} | {rate} Hz")
+        audio = sd.rec(int(8 * rate), samplerate=rate, channels=1,
+                       dtype="float32", device=device, blocking=True)
+    except Exception as exc:
+        raise RuntimeError(f"Microphone recording failed: {exc}") from exc
 
-            if not started:
-                raise RuntimeError(
-                    f"No speech detected from microphone '{info['name']}'. "
-                    "Check Windows Settings > Privacy & security > Microphone, "
-                    "and Settings > System > Sound > Input. BOTROL selected this default device."
-                )
+    mono = np.asarray(audio, dtype=np.float32).reshape(-1)
+    peak = float(np.max(np.abs(mono))) if mono.size else 0.0
+    rms = float(np.sqrt(np.mean(mono * mono))) if mono.size else 0.0
+    print(f"Captured audio level: peak={peak:.4f}, RMS={rms:.4f}")
+    if peak < 0.001:
+        raise RuntimeError("Captured silence. Check Windows microphone permissions, mute switch, and selected input device.")
 
-            while speech_elapsed < MAX_RECORD_SECONDS:
-                block, overflowed = stream.read(block_frames)
-                chunks.append(block.copy())
-                duration = len(block) / native_rate
-                speech_elapsed += duration
-                level = float(np.sqrt(np.mean(np.square(block))))
-                if level < max(0.0025, threshold * 0.55):
-                    silence_elapsed += duration
-                else:
-                    silence_elapsed = 0.0
-                if silence_elapsed >= SILENCE_SECONDS and speech_elapsed >= 1.0:
-                    break
-    except sd.PortAudioError as exc:
-        devices = sd.query_devices()
-        inputs = [f"{i}: {item['name']} ({item['default_samplerate']} Hz)"
-                  for i, item in enumerate(devices) if item["max_input_channels"] > 0]
-        raise RuntimeError(
-            f"Windows microphone capture failed: {exc}. "
-            f"Available input devices: {'; '.join(inputs) or 'none detected'}. "
-            "Choose a working default microphone in Windows Sound settings."
-        ) from exc
-
-    captured = np.concatenate(chunks, axis=0).reshape(-1)
-    target_count = max(1, int(round(len(captured) * TRANSCRIPTION_RATE / native_rate)))
-    old_positions = np.arange(len(captured), dtype=np.float64)
-    new_positions = np.linspace(0, len(captured) - 1, target_count)
-    resampled = np.interp(new_positions, old_positions, captured)
-    pcm = np.clip(resampled * 32767.0, -32768, 32767).astype("<i2").tobytes()
-
-    if len(pcm) < TRANSCRIPTION_RATE:
-        raise RuntimeError("The captured audio was too short. Please speak a little longer.")
-    recognizer = sr.Recognizer()
+    count = int(round(len(mono) * TRANSCRIPTION_RATE / rate))
+    resampled = np.interp(np.linspace(0, len(mono)-1, count), np.arange(len(mono)), mono)
+    pcm = np.clip(resampled * 32767, -32768, 32767).astype("<i2").tobytes()
     audio_data = sr.AudioData(pcm, TRANSCRIPTION_RATE, 2)
     try:
-        text = recognizer.recognize_google(audio_data, language=LANGUAGE)
+        transcript = sr.Recognizer().recognize_google(audio_data, language=LANGUAGE)
     except sr.UnknownValueError as exc:
-        raise RuntimeError("Speech was captured, but recognition could not understand it. Try speaking closer to the microphone.") from exc
+        raise RuntimeError("Audio was recorded, but speech recognition could not understand it. Try a short clear phrase.") from exc
     except sr.RequestError as exc:
-        raise RuntimeError(f"Speech recognition service unavailable: {exc}") from exc
-    print("You said:", text)
-    return text
+        raise RuntimeError(f"Google speech recognition failed: {exc}") from exc
+    print("You said:", transcript)
+    return transcript
+
 
 def run_task(token, transcript):
     result = http_json("/api/v1/admin/tasks/execute", token,
