@@ -7,6 +7,11 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+if not exist "botrol_hotkey.py" (
+  echo Downloading BOTROL desktop agent files...
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$base='https://raw.githubusercontent.com/TerminalJoint/botrol-setup/main/desktop-agent/'; Invoke-WebRequest ($base+'botrol_hotkey.py') -OutFile 'botrol_hotkey.py'; Invoke-WebRequest ($base+'requirements.txt') -OutFile 'requirements.txt'"
+  if errorlevel 1 goto failed
+)
 if not exist ".venv\Scripts\python.exe" (
   echo Setting up BOTROL desktop agent...
   py -3 -m venv .venv
