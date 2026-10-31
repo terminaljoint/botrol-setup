@@ -1,0 +1,33 @@
+name: Build BOTROL Windows executable
+on:
+  push:
+    branches: [main]
+    paths:
+      - "downloads/windows/BOTROL-Agent.cs"
+      - ".github/workflows/build-windows-agent.yml"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Windows executable
+        shell: pwsh
+        run: |
+          $compiler = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          if (!(Test-Path $compiler)) { throw "C# compiler not found." }
+          & $compiler /nologo /target:exe /optimize+ /platform:anycpu /out:downloads/windows/BOTROL.exe /reference:System.Speech.dll /reference:System.Web.Extensions.dll /reference:System.Security.dll downloads/windows/BOTROL-Agent.cs
+          if ($LASTEXITCODE -ne 0) { throw "BOTROL compilation failed." }
+      - name: Commit executable for website deployment
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add downloads/windows/BOTROL.exe
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "Build BOTROL Windows voice agent executable"
+            git push
+          }
