@@ -15,7 +15,7 @@ static const char* FIRMWARE_VERSION = "0.4.0";
 static const uint32_t SERIAL_BAUD = 115200;
 static const uint32_t WIFI_TIMEOUT_MS = 20000;
 static const uint32_t REGISTER_RETRY_MS = 30000;
-static const uint32_t POLL_INTERVAL_MS = 5000;
+static const uint32_t POLL_INTERVAL_MS = 1000;
 
 HijelHID_BLEKeyboard keyboard(DEVICE_NAME);
 Preferences prefs;
