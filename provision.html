@@ -154,7 +154,7 @@ async function scanWifi(){
   scannedNetworks=[];
   show($("networkList"),"Scanning nearby networks...");
   try{
-    await writer.write(new TextEncoder().encode(JSON.stringify({type:"wifi_scan"})+"\\n"));
+    await writer.write(new TextEncoder().encode(JSON.stringify({type:"wifi_scan"})+"\n"));
     logSerial("BROWSER","Sent wifi_scan request");
   }catch(error){show($("networkList"),"Could not start scan: "+error.message,"bad");}
 }
@@ -205,7 +205,8 @@ async function saveToken(){
 $("clearLog").addEventListener("click",()=>{$("serialLog").textContent="Log cleared.";});
 $("connect").addEventListener("click",connect);
 $("disconnect").addEventListener("click",disconnect);
-$("refreshWifi").addEventListener("click",requestWifiStatus);\n$("scanWifi").addEventListener("click",scanWifi);
+$("refreshWifi").addEventListener("click",requestWifiStatus);
+$("scanWifi").addEventListener("click",scanWifi);
 $("send").addEventListener("click",sendConfig);
 $("saveToken").addEventListener("click",saveToken);
 if("serial" in navigator)navigator.serial.addEventListener("disconnect",()=>{disconnect()});
