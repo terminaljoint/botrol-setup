@@ -3,12 +3,14 @@ import getpass
 import json
 import os
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import keyring
+import keyboard
 
 API = "https://botrol-cloud.onrender.com"
 DEVICE_ID = "BOTROL-ESP32-001"
@@ -48,6 +50,7 @@ recognition.onend=()=>{listening=false;$("listen").disabled=false;$("stop").disa
 try{recognition.start()}catch(e){$("status").textContent=e.message;$("status").className="bad";}
 }
 $("listen").onclick=start;$("stop").onclick=()=>{if(recognition&&listening)recognition.stop()};
+if(new URLSearchParams(location.search).get("listen")==="1"){setTimeout(start,900);}
 $("execute").onclick=async()=>{const transcript=finalText.trim();if(!transcript)return;$("execute").disabled=true;$("status").textContent="Sending task to BOTROL Cloud...";try{const r=await fetch("/task",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({transcript})});const d=await r.json();if(!r.ok)throw new Error(d.detail||"Task request failed");$("status").textContent="Task accepted: "+d.summary+"\n"+d.steps.map((x,i)=>(i+1)+". "+x.command+" ("+x.status+")").join("\n");$("status").className="good";}catch(e){$("status").textContent="Could not execute: "+e.message;$("status").className="bad";$("execute").disabled=false;}};
 </script></main></body></html>"""
 
@@ -113,18 +116,26 @@ def main():
             print("[BOTROL panel] " + fmt % args)
 
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-    url = f"http://{HOST}:{PORT}/"
-    print("\nBOTROL is ready.")
-    print("Voice panel:", url)
+    url = f"http://{HOST}:{PORT}/?listen=1"
+    print("\nBOTROL is ready. Press WIN + J anywhere to start voice input.")
     print("Speech recognition: browser Web Speech API")
-    print("Language:", LANGUAGE, "(choose Tamil or English in the panel)")
-    print("Keep this window open. Close it to stop BOTROL.")
-    threading.Thread(target=lambda: webbrowser.open(url), daemon=True).start()
+    print("Language: choose Tamil or English in the voice panel.")
+    print("First use: allow microphone access in Chrome/Edge. Keep this window open.")
+
+    def open_voice_panel():
+        print("[BOTROL] Win + J pressed. Opening voice panel...")
+        webbrowser.open(url)
+
+    keyboard.add_hotkey("windows+j", open_voice_panel, suppress=False)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        server.serve_forever()
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
         print("\nBOTROL stopped.")
     finally:
+        keyboard.unhook_all()
+        server.shutdown()
         server.server_close()
 
 if __name__ == "__main__":
