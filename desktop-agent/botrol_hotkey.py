@@ -1,6 +1,6 @@
 """BOTROL Windows voice hotkey agent.
 
-Hotkey: Win + Alt + Space
+Hotkey: Win + Ctrl + Alt + B
 Speech transcription: Google Web Speech (no API key; internet required)
 Task planning/execution: BOTROL Cloud's built-in command parser.
 Admin token: Windows Credential Manager via keyring.
@@ -32,9 +32,10 @@ RECORD_SECONDS = 7
 LANGUAGE = os.getenv("BOTROL_SPEECH_LANGUAGE", "en-IN")
 
 MOD_ALT = 0x0001
+MOD_CONTROL = 0x0002
 MOD_WIN = 0x0008
 MOD_NOREPEAT = 0x4000
-VK_SPACE = 0x20
+VK_B = 0x42
 WM_HOTKEY = 0x0312
 HOTKEY_ID = 1
 
@@ -122,7 +123,7 @@ def main():
         raise RuntimeError("BOTROL Cloud health check failed.")
     print("BOTROL Cloud connected.")
     print("\nBOTROL is ready.")
-    print("Hotkey: Win + Alt + Space")
+    print("Hotkey: Win + Ctrl + Alt + B")
     print(f"Speech language: {LANGUAGE} (change BOTROL_SPEECH_LANGUAGE to ta-IN for Tamil)")
     print("Press the hotkey, speak within 7 seconds. Press Ctrl+C to exit.")
     print("Note: speech audio is sent to Google's speech recognition service for transcription.")
@@ -145,7 +146,7 @@ def main():
         threading.Thread(target=worker, daemon=True).start()
 
     user32 = ctypes.windll.user32
-    if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_WIN | MOD_ALT | MOD_NOREPEAT, VK_SPACE):
+    if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_WIN | MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_B):
         raise RuntimeError("Could not register Win + Alt + Space. Another application may already use it.")
     try:
         msg = wintypes.MSG()
