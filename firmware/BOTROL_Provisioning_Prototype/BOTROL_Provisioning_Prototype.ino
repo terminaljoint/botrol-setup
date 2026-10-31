@@ -14,7 +14,7 @@ static const char* DEVICE_ID = "BOTROL-ESP32-001";
 static const char* FIRMWARE_VERSION = "0.4.0";
 static const uint32_t SERIAL_BAUD = 115200;
 static const uint32_t WIFI_TIMEOUT_MS = 20000;
-static const uint32_t REGISTER_RETRY_MS = 30000;
+static const uint32_t REGISTER_RETRY_MS = 5000;
 static const uint32_t POLL_INTERVAL_MS = 1000;
 
 HijelHID_BLEKeyboard keyboard(DEVICE_NAME);
@@ -35,6 +35,7 @@ int lastCloudHttpStatus = 0;
 bool setupPageOpened = false;
 bool cloudRegistered = false;
 bool commandInProgress = false;
+bool wasWifiConnected = false;
 volatile uint16_t lastWifiDisconnectReason = 0;
 uint32_t lastWifiEventAt = 0;
 
@@ -171,10 +172,11 @@ void pollCloud() {
     publishStatus("cloud_poll_failed", (String("Cloud poll HTTP status: ") + String(lastCloudHttpStatus) +
       ". Consecutive failures: " + String(consecutivePollFailures) + "/3.").c_str());
     // Do not drop registration because of one temporary Render/network hiccup.
-    if (consecutivePollFailures >= 3) {
-      cloudRegistered = false;
+    if (consecutivePollFailures >= 5) {
+      // A poll timeout is not proof that registration was lost. Keep polling:
+      // the API can recreate volatile device presence after a Render restart.
       consecutivePollFailures = 0;
-      publishStatus("cloud_disconnected", "Three cloud polls failed; registration will be retried.");
+      publishStatus("cloud_unstable", "Cloud is temporarily unreachable; continuing automatic retries.");
     }
   }
   if (cloudRegistered) consecutivePollFailures = 0;
@@ -303,6 +305,7 @@ void handleWifiState() {
       publishStatus("wifi_failed_restored", "Previous Wi-Fi connection restored");
     }
     wifiAttempt = WIFI_IDLE;
+    wasWifiConnected = true;
     cloudRegistered = false;
     if (cloudCredentialsReady()) registerDevice();
     return;
@@ -372,6 +375,19 @@ void setup() {
 void loop() {
   readSerialCommands();
   handleWifiState();
+
+  const bool wifiNowConnected = WiFi.status() == WL_CONNECTED;
+  if (wifiNowConnected && !wasWifiConnected) {
+    wasWifiConnected = true;
+    cloudRegistered = false;
+    publishStatus("wifi_reconnected", "Wi-Fi restored; reconnecting to BOTROL Cloud");
+    if (cloudCredentialsReady()) registerDevice();
+  } else if (!wifiNowConnected && wasWifiConnected) {
+    wasWifiConnected = false;
+    cloudRegistered = false;
+    publishStatus("wifi_lost", "Wi-Fi connection lost; waiting for automatic reconnect");
+  }
+
   openSetupPage();
 
   if (WiFi.status() == WL_CONNECTED && cloudCredentialsReady() && !cloudRegistered &&
