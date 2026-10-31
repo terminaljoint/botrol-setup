@@ -33,6 +33,8 @@ uint32_t lastPollAt = 0;
 bool setupPageOpened = false;
 bool cloudRegistered = false;
 bool commandInProgress = false;
+volatile uint16_t lastWifiDisconnectReason = 0;
+uint32_t lastWifiEventAt = 0;
 
 void publishStatus(const char* state, const char* detail = nullptr) {
   StaticJsonDocument<384> doc;
@@ -41,6 +43,8 @@ void publishStatus(const char* state, const char* detail = nullptr) {
   if (detail) doc["detail"] = detail;
   doc["wifi"] = WiFi.status() == WL_CONNECTED ? "connected" : "disconnected";
   doc["cloud"] = cloudRegistered ? "registered" : "not_registered";
+  doc["wifi_status_code"] = (int)WiFi.status();
+  doc["wifi_disconnect_reason"] = (int)lastWifiDisconnectReason;
   if (WiFi.status() == WL_CONNECTED) doc["ssid"] = WiFi.SSID();
   serializeJson(doc, Serial);
   Serial.println();
@@ -160,12 +164,44 @@ void pollCloud() {
 }
 
 void beginWifiAttempt(const String& ssid, const String& password, WifiAttempt kind) {
+  // Start from a clean station state without erasing saved BOTROL credentials.
+  wifiAttempt = WIFI_IDLE;
   WiFi.disconnect(false, false);
-  delay(100);
+  delay(250);
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+  lastWifiDisconnectReason = 0;
   WiFi.begin(ssid.c_str(), password.c_str());
   wifiAttempt = kind;
   wifiAttemptAt = millis();
+}
+
+void scanWifiNetworks() {
+  publishStatus("wifi_scan_started", "Scanning nearby 2.4 GHz Wi-Fi networks");
+  WiFi.mode(WIFI_STA);
+  const int count = WiFi.scanNetworks(false, true);
+  if (count < 0) {
+    publishStatus("wifi_scan_failed", "Wi-Fi scan failed; retry the scan");
+    return;
+  }
+
+  for (int i = 0; i < count; i++) {
+    StaticJsonDocument<256> doc;
+    doc["type"] = "wifi_network";
+    doc["ssid"] = WiFi.SSID(i);
+    doc["rssi"] = WiFi.RSSI(i);
+    doc["channel"] = WiFi.channel(i);
+    doc["encryption"] = (int)WiFi.encryptionType(i);
+    serializeJson(doc, Serial);
+    Serial.println();
+  }
+  WiFi.scanDelete();
+  StaticJsonDocument<128> done;
+  done["type"] = "wifi_scan_complete";
+  done["count"] = count;
+  serializeJson(done, Serial);
+  Serial.println();
 }
 
 void handleSerialCommand(const String& line) {
@@ -176,6 +212,11 @@ void handleSerialCommand(const String& line) {
   }
 
   const char* type = doc["type"] | "";
+  if (strcmp(type, "wifi_scan") == 0) {
+    scanWifiNetworks();
+    return;
+  }
+
   if (strcmp(type, "get_status") == 0) {
     publishStatus("device_status", "Current ESP32 connection status");
     return;
@@ -256,7 +297,16 @@ void handleWifiState() {
   } else {
     WiFi.disconnect(false, false);
     wifiAttempt = WIFI_IDLE;
-    publishStatus("wifi_failed", "Connection failed; check credentials and retry");
+    StaticJsonDocument<256> failure;
+    failure["type"] = "status";
+    failure["state"] = "wifi_failed";
+    failure["detail"] = "Connection timed out. Check SSID, password, 2.4 GHz availability, and router security.";
+    failure["wifi_status_code"] = (int)WiFi.status();
+    failure["wifi_disconnect_reason"] = (int)lastWifiDisconnectReason;
+    failure["wifi"] = "disconnected";
+    failure["cloud"] = cloudRegistered ? "registered" : "not_registered";
+    serializeJson(failure, Serial);
+    Serial.println();
   }
 }
 
@@ -280,6 +330,13 @@ void setup() {
   activePassword = prefs.getString("password", "");
   deviceToken = prefs.getString("device_token", "");
 
+  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+    // Event ID 5 is STA_DISCONNECTED in Arduino-ESP32 2.x and 3.x.
+    if ((int)event == 5) {
+      lastWifiDisconnectReason = info.wifi_sta_disconnected.reason;
+      lastWifiEventAt = millis();
+    }
+  });
   keyboard.begin();
   publishStatus("usb_ready", "BOTROL USB provisioning and cloud client ready");
 
