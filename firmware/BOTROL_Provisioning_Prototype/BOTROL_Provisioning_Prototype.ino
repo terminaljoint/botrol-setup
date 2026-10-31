@@ -176,6 +176,11 @@ void handleSerialCommand(const String& line) {
   }
 
   const char* type = doc["type"] | "";
+  if (strcmp(type, "get_status") == 0) {
+    publishStatus("device_status", "Current ESP32 connection status");
+    return;
+  }
+
   if (strcmp(type, "wifi_config") == 0) {
     const char* ssid = doc["ssid"] | "";
     const char* password = doc["password"] | "";
