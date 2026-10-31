@@ -34,16 +34,17 @@
 <p class="note">This page cannot directly detect a Bluetooth HID pairing. The status changes when you confirm pairing. Browser-based device communication is a separate feature and is not enabled yet.</p>
 </section>
 <section class="panel" style="margin-top:18px">
-<div class="head"><h2>4. Install BOTROL Voice Hotkey</h2><span class="hint">Windows 10 / 11</span></div>
-<p class="lead" style="font-size:14px;margin:8px 0 14px">Run BOTROL from anywhere on your desktop. No need to open the website for every command.</p>
+<div class="head"><h2>4. Start BOTROL Voice Agent</h2><span class="hint">Windows 10 / 11</span></div>
+<p class="lead" style="font-size:14px;margin:8px 0 14px">One download, one explicit launch. No unsigned BOTROL executable.</p>
 <ol>
-<li>Download the launcher below and save it somewhere convenient.</li>
-<li>Double-click <strong>Start-BOTROL.bat</strong>. It downloads the required agent files and installs its Python dependencies automatically.</li>
-<li>On first launch, enter your BOTROL admin token once. It is saved in Windows Credential Manager.</li>
-<li>Keep BOTROL running in the background. Press <strong>Win + Alt + Space</strong>, then speak your command.</li>
+<li>Click <strong>Download &amp; install BOTROL</strong>. Your browser downloads the official Windows batch launcher.</li>
+<li>Open the downloaded <strong>Start-BOTROL.bat</strong>. Windows requires this separate confirmation before running a downloaded program.</li>
+<li>The launcher downloads the Python agent source from this public GitHub repository, creates an isolated environment under <strong>%LOCALAPPDATA%\\BOTROL</strong>, and installs its dependencies.</li>
+<li>On first launch, enter your BOTROL admin token in the console. It is stored in Windows Credential Manager.</li>
+<li>Keep the console open. Press <strong>Win + J</strong> anywhere to open the voice panel.</li>
 </ol>
-<div class="actions"><a class="action" href="https://raw.githubusercontent.com/TerminalJoint/botrol-setup/main/desktop-agent/Start-BOTROL.bat" download="Start-BOTROL.bat">Download Windows launcher ↓</a><a class="action secondary" href="https://github.com/TerminalJoint/botrol-setup/tree/main/desktop-agent">View source & instructions ↗</a></div>
-<p class="note">Requires Windows 10/11, Python 3.10+, microphone and internet. Speech is transcribed by Google's speech recognition service. BOTROL task parsing itself uses no AI API. The downloaded script is open source and can be inspected before running.</p>
+<div class="actions"><a class="action" href="https://raw.githubusercontent.com/TerminalJoint/botrol-setup/main/desktop-agent/Start-BOTROL.bat" download="Start-BOTROL.bat">Download &amp; install BOTROL ↓</a><a class="action secondary" href="https://github.com/TerminalJoint/botrol-setup/tree/main/desktop-agent">Inspect source code ↗</a></div>
+<p class="note">Requires Windows 10/11, Python 3.10+, Chrome or Edge, microphone and internet. The browser handles speech recognition. BOTROL's task parser uses deterministic rules, not an AI API. The launcher does not disable Windows security or run silently.</p>
 </section>
 \n<footer><span>BOTROL · A Terminal Joint project</span><span><a href="./provision.html">Wi-Fi setup ↗</a> · <a href="./dashboard.html">Open Command Center ↗</a></span></footer>
 </main>
