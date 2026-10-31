@@ -1,13 +1,10 @@
 import os
 import secrets
-from contextlib import contextmanager
+import threading
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-import psycopg
-from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -17,8 +14,8 @@ from ai_planner import plan_task, PlannerError
 
 app = FastAPI(
     title="BOTROL Cloud API",
-    version="0.4.0",
-    description="Persistent cloud relay for BOTROL ESP32 devices with BLE HID desktop control.",
+    version="0.5.0",
+    description="In-memory command relay for BOTROL ESP32 devices.",
 )
 
 allowed_origins = [
@@ -35,46 +32,12 @@ app.add_middleware(
 )
 
 bearer = HTTPBearer(auto_error=False)
-DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
-SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS botrol_devices (
-    device_id TEXT PRIMARY KEY,
-    firmware_version TEXT NOT NULL DEFAULT 'unknown',
-    registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    status TEXT NOT NULL DEFAULT 'online'
-);
-CREATE TABLE IF NOT EXISTS botrol_commands (
-    command_id UUID PRIMARY KEY,
-    task_id UUID,
-    step INTEGER,
-    task_summary TEXT,
-    device_id TEXT NOT NULL REFERENCES botrol_devices(device_id),
-    command TEXT NOT NULL CHECK (command IN ('ping','ble_open_notepad','ble_open_calculator')),
-    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-    status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','delivered','completed','failed')),
-    result TEXT NOT NULL DEFAULT '',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    delivered_at TIMESTAMPTZ,
-    completed_at TIMESTAMPTZ
-);
-CREATE INDEX IF NOT EXISTS botrol_commands_queue_idx
-    ON botrol_commands(device_id, status, created_at);
-CREATE INDEX IF NOT EXISTS botrol_commands_task_idx
-    ON botrol_commands(task_id, step);
-"""
+_LOCK = threading.RLock()
+_DEVICES: dict[str, dict[str, Any]] = {}
+_COMMANDS: dict[str, dict[str, Any]] = {}
 
-def db_connect():
-    if not DATABASE_URL:
-        raise HTTPException(status_code=503, detail="Persistent database is not configured. Set DATABASE_URL in Render.")
-    try:
-        conn = psycopg.connect(DATABASE_URL, connect_timeout=10, sslmode="require", row_factory=dict_row, prepare_threshold=None)
-        conn.execute(SCHEMA_SQL, prepare=False)
-        return conn
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"BOTROL database unavailable: {type(exc).__name__}") from exc
+def now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 def _check_bearer(supplied: str, env_name: str, label: str) -> None:
     expected = os.getenv(env_name, "")
@@ -110,90 +73,81 @@ class CommandResult(BaseModel):
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    try:
-        with db_connect() as conn:
-            conn.execute("SELECT 1")
-        return {"service": "BOTROL Cloud API", "status": "ok", "database": "connected", "version": "0.4.0"}
-    except HTTPException as exc:
-        return {"service": "BOTROL Cloud API", "status": "degraded", "database": "unavailable", "detail": exc.detail, "version": "0.4.0"}
+    with _LOCK:
+        return {
+            "service": "BOTROL Cloud API",
+            "status": "ok",
+            "storage": "in-memory",
+            "registered_devices": len(_DEVICES),
+            "queued_commands": sum(1 for c in _COMMANDS.values() if c["status"] == "queued"),
+            "version": "0.5.0",
+        }
 
 @app.post("/api/v1/devices/register")
 def register_device(body: DeviceRegistration, _: str = Depends(require_device_token)) -> dict[str, Any]:
-    now = datetime.now(timezone.utc)
-    with db_connect() as conn:
-        row = conn.execute("""
-            INSERT INTO botrol_devices(device_id, firmware_version, registered_at, last_seen, status)
-            VALUES (%s, %s, %s, %s, 'online')
-            ON CONFLICT(device_id) DO UPDATE SET
-                firmware_version=EXCLUDED.firmware_version, last_seen=EXCLUDED.last_seen, status='online'
-            RETURNING device_id, firmware_version, registered_at, last_seen, status
-        """, (body.device_id, body.firmware_version, now, now)).fetchone()
-    return {"ok": True, "device": row}
+    timestamp = now()
+    with _LOCK:
+        device = _DEVICES.get(body.device_id)
+        if device is None:
+            device = {"device_id": body.device_id, "registered_at": timestamp}
+            _DEVICES[body.device_id] = device
+        device.update({"firmware_version": body.firmware_version, "last_seen": timestamp, "status": "online"})
+        return {"ok": True, "device": dict(device)}
 
 @app.get("/api/v1/devices/{device_id}/commands/next")
 def get_next_command(device_id: str, _: str = Depends(require_device_token)) -> dict[str, Any]:
-    with db_connect() as conn:
-        device = conn.execute(
-            "UPDATE botrol_devices SET last_seen=NOW(), status='online' WHERE device_id=%s RETURNING device_id",
-            (device_id,),
-        ).fetchone()
+    with _LOCK:
+        device = _DEVICES.get(device_id)
         if not device:
             raise HTTPException(status_code=404, detail="Device is not registered. Re-run device provisioning.")
-        command = conn.execute("""
-            SELECT command_id, task_id, step, device_id, command, payload, status, created_at
-            FROM botrol_commands
-            WHERE device_id=%s AND status='queued'
-            ORDER BY created_at, step
-            FOR UPDATE SKIP LOCKED LIMIT 1
-        """, (device_id,)).fetchone()
-        if not command:
+        device.update({"last_seen": now(), "status": "online"})
+        queued = [
+            c for c in _COMMANDS.values()
+            if c["device_id"] == device_id and c["status"] == "queued"
+        ]
+        if not queued:
             return {"ok": True, "command": None}
-        updated = conn.execute("""
-            UPDATE botrol_commands SET status='delivered', delivered_at=NOW()
-            WHERE command_id=%s
-            RETURNING command_id, task_id, step, device_id, command, payload, status, created_at, delivered_at
-        """, (command["command_id"],)).fetchone()
-    updated["command_id"] = str(updated["command_id"])
-    if updated.get("task_id"):
-        updated["task_id"] = str(updated["task_id"])
-    return {"ok": True, "command": updated}
+        command = min(queued, key=lambda c: (c["created_at"], c.get("step") or 0))
+        command["status"] = "delivered"
+        command["delivered_at"] = now()
+        return {"ok": True, "command": dict(command)}
 
 @app.post("/api/v1/devices/{device_id}/commands/{command_id}/result")
 def report_result(device_id: str, command_id: str, body: CommandResult, _: str = Depends(require_device_token)) -> dict[str, bool]:
-    with db_connect() as conn:
-        row = conn.execute("""
-            UPDATE botrol_commands SET status=%s, result=%s, completed_at=NOW()
-            WHERE command_id=%s AND device_id=%s RETURNING command_id
-        """, (body.status, body.message, command_id, device_id)).fetchone()
-        if not row:
+    with _LOCK:
+        command = _COMMANDS.get(command_id)
+        if not command or command["device_id"] != device_id:
             raise HTTPException(status_code=404, detail="Command not found for this device")
-        conn.execute("UPDATE botrol_devices SET last_seen=NOW(), status='online' WHERE device_id=%s", (device_id,))
+        command.update({"status": body.status, "result": body.message, "completed_at": now()})
+        if device_id in _DEVICES:
+            _DEVICES[device_id].update({"last_seen": now(), "status": "online"})
     return {"ok": True}
 
 @app.get("/api/v1/admin/commands/{command_id}", dependencies=[Depends(require_admin)])
 def get_command_status(command_id: str) -> dict[str, Any]:
-    with db_connect() as conn:
-        row = conn.execute("""
-            SELECT command_id, device_id, command, status, result, created_at, delivered_at, completed_at
-            FROM botrol_commands WHERE command_id=%s
-        """, (command_id,)).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Command not found")
-    row["command_id"] = str(row["command_id"])
-    return {"ok": True, "command": row}
+    with _LOCK:
+        command = _COMMANDS.get(command_id)
+        if not command:
+            raise HTTPException(status_code=404, detail="Command not found")
+        return {"ok": True, "command": dict(command)}
+
+def _enqueue(device_id: str, command: str, payload: dict[str, Any], task_id: str | None = None,
+             step: int | None = None, summary: str = "") -> dict[str, Any]:
+    command_id = str(uuid4())
+    row = {
+        "command_id": command_id, "task_id": task_id, "step": step, "task_summary": summary,
+        "device_id": device_id, "command": command, "payload": payload, "status": "queued",
+        "result": "", "created_at": now(), "delivered_at": None, "completed_at": None,
+    }
+    _COMMANDS[command_id] = row
+    return dict(row)
 
 @app.post("/api/v1/admin/commands", dependencies=[Depends(require_admin)])
 def enqueue_command(body: CommandRequest) -> dict[str, Any]:
-    command_id = uuid4()
-    with db_connect() as conn:
-        if not conn.execute("SELECT device_id FROM botrol_devices WHERE device_id=%s", (body.device_id,)).fetchone():
+    with _LOCK:
+        if body.device_id not in _DEVICES:
             raise HTTPException(status_code=404, detail="Device is not registered. Re-run device provisioning.")
-        row = conn.execute("""
-            INSERT INTO botrol_commands(command_id, device_id, command, payload)
-            VALUES (%s, %s, %s, %s) RETURNING command_id, device_id, command, payload, status, created_at
-        """, (command_id, body.device_id, body.command, Jsonb(body.payload))).fetchone()
-    row["command_id"] = str(row["command_id"])
-    return {"ok": True, "command": row}
+        return {"ok": True, "command": _enqueue(body.device_id, body.command, body.payload)}
 
 @app.post("/api/v1/admin/tasks/execute", dependencies=[Depends(require_admin)])
 def execute_task(body: TaskRequest) -> dict[str, Any]:
@@ -201,29 +155,25 @@ def execute_task(body: TaskRequest) -> dict[str, Any]:
         plan = plan_task(body.transcript)
     except PlannerError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    task_id = uuid4()
-    task_steps = []
-    with db_connect() as conn:
-        if not conn.execute("SELECT device_id FROM botrol_devices WHERE device_id=%s", (body.device_id,)).fetchone():
+    task_id = str(uuid4())
+    steps = []
+    with _LOCK:
+        if body.device_id not in _DEVICES:
             raise HTTPException(status_code=404, detail="Device is not registered. Re-run device provisioning.")
         for index, step in enumerate(plan["steps"], start=1):
-            command_id = uuid4()
-            conn.execute("""
-                INSERT INTO botrol_commands(command_id, task_id, step, task_summary, device_id, command, payload)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (command_id, task_id, index, plan["summary"], body.device_id, step["command"], psycopg.types.json.Jsonb(step["payload"])))
-            task_steps.append({"command_id": str(command_id), "command": step["command"], "status": "queued"})
-    return {"ok": True, "task": {"task_id": str(task_id), "summary": plan["summary"], "steps": task_steps}}
+            row = _enqueue(body.device_id, step["command"], step["payload"], task_id, index, plan["summary"])
+            steps.append({"command_id": row["command_id"], "command": row["command"], "status": "queued"})
+    return {"ok": True, "task": {"task_id": task_id, "summary": plan["summary"], "steps": steps}}
 
 @app.get("/api/v1/admin/tasks/{task_id}", dependencies=[Depends(require_admin)])
 def get_task_status(task_id: str) -> dict[str, Any]:
-    with db_connect() as conn:
-        rows = conn.execute("""
-            SELECT command_id, command, status, result, step
-            FROM botrol_commands WHERE task_id=%s ORDER BY step
-        """, (task_id,)).fetchall()
+    with _LOCK:
+        rows = [
+            {"command_id": c["command_id"], "command": c["command"], "status": c["status"],
+             "result": c["result"], "step": c["step"]}
+            for c in _COMMANDS.values() if c.get("task_id") == task_id
+        ]
+        rows.sort(key=lambda c: c["step"] or 0)
     if not rows:
         raise HTTPException(status_code=404, detail="Task not found")
-    for row in rows:
-        row["command_id"] = str(row["command_id"])
     return {"ok": True, "task_id": task_id, "steps": rows}
