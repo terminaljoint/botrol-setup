@@ -11,7 +11,7 @@ static const char* SETUP_URL = "https://botrol-setup.vercel.app/provision.html";
 static const char* DEVICE_NAME = "BOTROL";
 static const char* BOTROL_SERVER = "https://botrol-cloud.onrender.com";
 static const char* DEVICE_ID = "BOTROL-ESP32-001";
-static const char* FIRMWARE_VERSION = "0.4.0";
+static const char* FIRMWARE_VERSION = "0.4.1";
 static const uint32_t SERIAL_BAUD = 115200;
 static const uint32_t WIFI_TIMEOUT_MS = 20000;
 static const uint32_t REGISTER_RETRY_MS = 5000;
@@ -20,7 +20,6 @@ static const uint32_t POLL_INTERVAL_MS = 1000;
 
 HijelHID_BLEKeyboard keyboard(DEVICE_NAME);
 Preferences prefs;
-WiFiClientSecure secureClient;
 
 String activeSsid, activePassword, candidateSsid, candidatePassword;
 String restoreSsid, restorePassword, deviceToken;
@@ -62,20 +61,38 @@ bool cloudCredentialsReady() {
 bool httpsRequest(const char* method, const String& path, const String& body, String& response) {
   if (WiFi.status() != WL_CONNECTED || !cloudCredentialsReady()) return false;
 
-  HTTPClient http;
-  // DEVELOPMENT ONLY: replace setInsecure() with trusted CA validation before production.
-  secureClient.setInsecure();
-  const String url = String(BOTROL_SERVER) + path;
-  if (!http.begin(secureClient, url)) { lastCloudHttpStatus = -1000; return false; }
+  // Use a fresh TLS socket per request. Reusing one global TLS client after
+  // Wi-Fi reconnects can leave stale sockets and cause intermittent -1 errors.
+  WiFiClientSecure tlsClient;
+  tlsClient.setInsecure(); // DEVELOPMENT ONLY: install and validate the CA for production.
+  tlsClient.setHandshakeTimeout(15);
 
-  http.setTimeout(6000);
+  HTTPClient http;
+  const String url = String(BOTROL_SERVER) + path;
+  http.setReuse(false);
+  http.setConnectTimeout(12000);
+  http.setTimeout(12000);
+  if (!http.begin(tlsClient, url)) {
+    lastCloudHttpStatus = -1000;
+    Serial.println("[BOTROL] HTTPS begin failed for " + url);
+    return false;
+  }
+
   http.addHeader("Authorization", "Bearer " + deviceToken);
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("Connection", "close");
 
   const int status = strcmp(method, "GET") == 0 ? http.GET() : http.POST(body);
   lastCloudHttpStatus = status;
   response = status > 0 ? http.getString() : "";
+  if (status < 0) {
+    Serial.println("[BOTROL] HTTPS transport error: " + HTTPClient::errorToString(status));
+  } else {
+    Serial.println("[BOTROL] HTTPS " + String(method) + " " + path +
+                   " -> HTTP " + String(status));
+  }
   http.end();
+  tlsClient.stop();
   return status >= 200 && status < 300;
 }
 
