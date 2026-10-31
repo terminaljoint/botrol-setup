@@ -1,4 +1,5 @@
 """BOTROL Windows voice panel using the browser's native Web Speech API."""
+import ctypes
 import getpass
 import json
 import os
@@ -9,8 +10,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from ctypes import wintypes
+
 import keyring
-import keyboard
 
 API = "https://botrol-cloud.onrender.com"
 DEVICE_ID = "BOTROL-ESP32-001"
@@ -137,15 +139,38 @@ def main():
         print("[BOTROL] Win + J pressed. Opening voice panel...")
         webbrowser.open(url, new=0)
 
-    keyboard.add_hotkey("windows+j", open_voice_panel, suppress=False, trigger_on_release=True)
     threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    # Use Windows' native global-hotkey API instead of a low-level keyboard
+    # hook. This reliably receives Win+J without requiring keyboard-hook access.
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    hotkey_id = 1
+    MOD_WIN = 0x0008
+    WM_HOTKEY = 0x0312
+    if not user32.RegisterHotKey(None, hotkey_id, MOD_WIN, ord("J")):
+        error = ctypes.get_last_error()
+        server.shutdown()
+        server.server_close()
+        raise RuntimeError(
+            f"Could not register Win+J (Windows error {error}). "
+            "Another application may already own this shortcut."
+        )
+
+    print("[BOTROL] Global Win+J shortcut registered successfully.")
+    msg = wintypes.MSG()
     try:
         while True:
-            time.sleep(1)
+            result = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
+            if result == 0:
+                break
+            if result == -1:
+                raise ctypes.WinError(ctypes.get_last_error())
+            if msg.message == WM_HOTKEY and msg.wParam == hotkey_id:
+                open_voice_panel()
     except KeyboardInterrupt:
         print("\nBOTROL stopped.")
     finally:
-        keyboard.unhook_all()
+        user32.UnregisterHotKey(None, hotkey_id)
         server.shutdown()
         server.server_close()
 
