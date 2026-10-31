@@ -20,20 +20,11 @@
 </section>
 <section class="panel">
 <h2>Windows voice hotkey</h2>
-<p class="hint">Download the standalone Windows app. Press <strong>Win + Ctrl + Alt + B</strong> anywhere to speak a task. No BAT launcher or Python installation needed.</p>
+<p class="hint">Download and run the BOTROL Windows app. Press <strong>Win + Ctrl + Alt + V</strong> anywhere, speak naturally, then pause. BOTROL detects the end of your speech and sends the task to the cloud. No browser voice buttons or Python installation needed.</p>
 <div class="row">
 <a class="btn" href="https://github.com/TerminalJoint/botrol-setup/releases/download/desktop-agent-latest/BOTROL-Voice-Agent.exe">Download BOTROL for Windows (.exe)</a>
 </div>
-<div class="notice">First launch asks for your admin token once and stores it in Windows Credential Manager. Keep the app window running. Requires a microphone and internet access. Speech audio is sent to Google's speech recognition service. This build is not code-signed, so Windows Smart App Control may still block it. A trusted signing certificate is needed to remove that warning reliably.</div>
-</section>
-<section class="panel">
-<h2>Voice & AI tasks</h2>
-<p class="hint">Speak naturally or type a task. BOTROL uses a built-in command parser. No AI account, API key, or external AI service is needed.</p>
-<label class="field" for="taskText">Your task</label>
-<input id="taskText" maxlength="2000" placeholder="Open Notepad, then open Calculator">
-<div class="row"><button class="btn secondary" id="voiceButton" type="button">🎙 Speak</button><button class="btn" id="runTask" type="button">Run task</button></div>
-<div class="status" id="taskStatus" role="status" aria-live="polite">Ready. Example: “Open Notepad, then open Calculator.”</div>
-<div class="notice">Voice recognition depends on browser support. No AI API is used. Only actions supported by the current ESP32 firmware are accepted.</div>
+<div class="notice">First launch asks for your admin token once and stores it in Windows Credential Manager. Keep the app window running. Requires a working Windows microphone and internet access. Audio is captured until you pause, then sent to Google's speech recognition service. This build is not code-signed, so Windows Smart App Control may still block it. A trusted signing certificate is needed to remove that warning reliably.</div>
 </section>
 <section class="panel">
 <h2>ESP32 connection</h2><div class="hint">Target device: <strong>BOTROL-ESP32-001</strong></div>
