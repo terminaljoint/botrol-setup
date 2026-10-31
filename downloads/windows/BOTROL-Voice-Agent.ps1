@@ -1,5 +1,5 @@
 # BOTROL Windows Voice Hotkey Agent
-# Hotkey: Win + Alt + B
+# Hotkey: Win + Ctrl + Alt + B
 # Requires Windows PowerShell 5.1, microphone, and installed Windows speech recognition.
 $ErrorActionPreference = "Stop"
 $ApiBase = "https://botrol-cloud.onrender.com"
@@ -74,15 +74,15 @@ function Invoke-BotrolVoiceTask {
 }
 if($args -contains "--configure"){Save-BotrolToken;exit}
 if($args -contains "--forget-token"){if(Test-Path $TokenFile){Remove-Item $TokenFile -Force};Write-Host "Saved token removed.";exit}
-$MOD_ALT=0x0001;$MOD_WIN=0x0008;$VK_B=0x42;$HOTKEY_ID=0xB071
+$MOD_ALT=0x0001;$MOD_CONTROL=0x0002;$MOD_WIN=0x0008;$VK_B=0x42;$HOTKEY_ID=0xB071
 Write-Host ""
 Write-Host "BOTROL VOICE AGENT" -ForegroundColor Cyan
-Write-Host "Hotkey: WIN + ALT + B" -ForegroundColor White
+Write-Host "Hotkey: WIN + CTRL + ALT + B" -ForegroundColor White
 Write-Host "Press it anywhere to speak. Ctrl + C exits. Keep this window running." -ForegroundColor Gray
 $null=Get-BotrolToken
-if(-not [BotrolHotkey.Native]::RegisterHotKey([IntPtr]::Zero,$HOTKEY_ID,($MOD_WIN -bor $MOD_ALT),$VK_B)){
+if(-not [BotrolHotkey.Native]::RegisterHotKey([IntPtr]::Zero,$HOTKEY_ID,$MOD_WIN -bor $MOD_ALT -bor $MOD_CONTROL,$VK_B)){
  $code=[Runtime.InteropServices.Marshal]::GetLastWin32Error()
- throw "Could not register Win + Alt + B (Windows error $code). Another app may use it."
+ throw "Could not register Win + Ctrl + Alt + B (Windows error $code). Another app may use it."
 }
 Write-Host "Ready. Waiting for Win + Alt + B..." -ForegroundColor Green
 try{
