@@ -1,1 +1,2 @@
 keyring>=25
+keyboard>=0.13.5
