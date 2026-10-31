@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -190,7 +191,7 @@ def enqueue_command(body: CommandRequest) -> dict[str, Any]:
         row = conn.execute("""
             INSERT INTO botrol_commands(command_id, device_id, command, payload)
             VALUES (%s, %s, %s, %s) RETURNING command_id, device_id, command, payload, status, created_at
-        """, (command_id, body.device_id, body.command, psycopg.types.json.Jsonb(body.payload))).fetchone()
+        """, (command_id, body.device_id, body.command, Jsonb(body.payload))).fetchone()
     row["command_id"] = str(row["command_id"])
     return {"ok": True, "command": row}
 
