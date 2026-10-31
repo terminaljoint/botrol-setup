@@ -30,7 +30,7 @@ jobs:
 
       - name: Build standalone executable
         working-directory: desktop-agent
-        run: pyinstaller --noconfirm --clean --onefile --console --name BOTROL-Voice-Agent --collect-all sounddevice --collect-all speech_recognition --hidden-import keyring.backends.Windows botrol_hotkey.py
+        run: pyinstaller --noconfirm --clean --onefile --console --name BOTROL-Voice-Agent --hidden-import keyring.backends.Windows botrol_hotkey.py
 
       - name: Publish latest executable
         uses: softprops/action-gh-release@v2
