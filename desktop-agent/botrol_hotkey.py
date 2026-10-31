@@ -1,189 +1,131 @@
-"""BOTROL Windows voice hotkey agent.
-
-Hotkey: Win + J
-Speech transcription: Google Web Speech (no API key; internet required)
-Task planning/execution: BOTROL Cloud's built-in command parser.
-Admin token: Windows Credential Manager via keyring.
-"""
-import ctypes
+"""BOTROL Windows voice panel using the browser's native Web Speech API."""
 import getpass
 import json
 import os
-import queue
-import sys
 import threading
-import time
-import urllib.error
-import urllib.request
-import wave
-from ctypes import wintypes
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import keyring
-import numpy as np
-import sounddevice as sd
-import speech_recognition as sr
 
 API = "https://botrol-cloud.onrender.com"
 DEVICE_ID = "BOTROL-ESP32-001"
 SERVICE_NAME = "BOTROL Desktop Agent"
 USERNAME = "admin-token"
-TRANSCRIPTION_RATE = 16000
-MAX_RECORD_SECONDS = 20
-WAIT_FOR_SPEECH_SECONDS = 8
-SILENCE_SECONDS = 1.2
-BLOCK_SECONDS = 0.1
 LANGUAGE = os.getenv("BOTROL_SPEECH_LANGUAGE", "en-IN")
+HOST = "127.0.0.1"
+PORT = 8765
 
-MOD_ALT = 0x0001
-MOD_CONTROL = 0x0002
-MOD_WIN = 0x0008
-MOD_NOREPEAT = 0x4000
-VK_J = 0x4A
-WM_HOTKEY = 0x0312
-HOTKEY_ID = 1
-
+PAGE = r"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BOTROL Voice Panel</title><style>
+*{box-sizing:border-box}body{margin:0;background:#090d18;color:#edf3ff;font:16px system-ui;min-height:100vh;display:grid;place-items:center;padding:20px}
+main{width:min(620px,100%);background:#111a2a;border:1px solid #293750;border-radius:22px;padding:28px;box-shadow:0 24px 80px #0007}
+h1{margin:0;font-size:38px;letter-spacing:-.05em}h1 span{color:#aab6ff}.muted{color:#a0aec2;font-size:14px}
+button,select{font:inherit;border-radius:12px;padding:13px 18px;border:1px solid #7183d8;background:#8797f4;color:#091020;font-weight:750;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}.row{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}
+#transcript{min-height:125px;background:#080f1d;border:1px solid #293750;border-radius:13px;padding:16px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:19px}
+#status{margin-top:14px;color:#a0aec2;font-size:14px;white-space:pre-wrap}.good{color:#65e0b2!important}.bad{color:#ff8585!important}
+</style></head><body><main>
+<p class="muted">TERMINAL JOINT / BOTROL</p><h1>Voice <span>command.</span></h1>
+<p class="muted">Browser-native speech recognition. Your words appear here as you speak. No Python audio capture or fixed recording timer.</p>
+<div class="row"><label class="muted">Language&nbsp; <select id="language"><option value="en-IN">English (India)</option><option value="ta-IN">Tamil</option></select></label></div>
+<div class="row"><button id="listen">Start listening</button><button id="stop" disabled>Stop</button><button id="execute" disabled>Execute transcript</button></div>
+<div id="transcript">Your recognized words will appear here...</div><div id="status">Ready. Click Start listening and allow microphone access.</div>
+<p class="muted">Recognition is provided by your browser and may send audio to its speech service. Review the transcript before executing.</p>
+<script>
+const $=id=>document.getElementById(id);let recognition=null,finalText="",listening=false;
+const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(!Speech){$("status").textContent="Speech recognition is not supported in this browser. Please use current Google Chrome or Microsoft Edge.";$("listen").disabled=true;}
+function start(){if(!Speech)return;finalText="";$("transcript").textContent="Listening...";recognition=new Speech();recognition.lang=$("language").value;recognition.continuous=true;recognition.interimResults=true;recognition.maxAlternatives=1;
+recognition.onstart=()=>{listening=true;$("listen").disabled=true;$("stop").disabled=false;$("status").textContent="Listening. Speak naturally, then click Stop."};
+recognition.onresult=e=>{let interim="";for(let i=e.resultIndex;i<e.results.length;i++){const part=e.results[i][0].transcript;if(e.results[i].isFinal)finalText+=part+" ";else interim+=part;}
+$("transcript").textContent=(finalText+interim).trim()||"Listening...";$("execute").disabled=!finalText.trim();};
+recognition.onerror=e=>{$("status").textContent="Speech recognition error: "+e.error;$("status").className="bad";};
+recognition.onend=()=>{listening=false;$("listen").disabled=false;$("stop").disabled=true;$("execute").disabled=!finalText.trim();if(finalText.trim()){$("status").textContent="Transcript ready. Review it, then execute.";$("status").className="good";}};
+try{recognition.start()}catch(e){$("status").textContent=e.message;$("status").className="bad";}
+}
+$("listen").onclick=start;$("stop").onclick=()=>{if(recognition&&listening)recognition.stop()};
+$("execute").onclick=async()=>{const transcript=finalText.trim();if(!transcript)return;$("execute").disabled=true;$("status").textContent="Sending task to BOTROL Cloud...";try{const r=await fetch("/task",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({transcript})});const d=await r.json();if(!r.ok)throw new Error(d.detail||"Task request failed");$("status").textContent="Task accepted: "+d.summary+"\n"+d.steps.map((x,i)=>(i+1)+". "+x.command+" ("+x.status+")").join("\n");$("status").className="good";}catch(e){$("status").textContent="Could not execute: "+e.message;$("status").className="bad";$("execute").disabled=false;}};
+</script></main></body></html>"""
 
 def get_token():
     token = keyring.get_password(SERVICE_NAME, USERNAME)
     if token:
         return token
     print("\nFirst-time setup: enter your BOTROL_ADMIN_TOKEN.")
-    print("It will be stored in Windows Credential Manager, not in this script.")
+    print("It will be stored in Windows Credential Manager.")
     token = getpass.getpass("Admin token: ").strip()
     if not token:
         raise RuntimeError("No admin token entered.")
     keyring.set_password(SERVICE_NAME, USERNAME, token)
-    print("Token saved securely in Windows Credential Manager.\n")
+    print("Token saved securely in Windows Credential Manager.")
     return token
 
-
-def http_json(path, token, body=None):
-    data = json.dumps(body).encode("utf-8") if body is not None else None
-    headers = {"Authorization": "Bearer " + token}
-    if data is not None:
-        headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(API + path, data=data, headers=headers,
-                                     method="POST" if data is not None else "GET")
+def submit_task(token, transcript):
+    payload = json.dumps({"device_id": DEVICE_ID, "transcript": transcript}).encode()
+    request = Request(API + "/api/v1/admin/tasks/execute", data=payload,
+                      headers={"Authorization": "Bearer " + token,
+                               "Content-Type": "application/json"}, method="POST")
     try:
-        with urllib.request.urlopen(request, timeout=35) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
+        with urlopen(request, timeout=35) as response:
+            return json.loads(response.read().decode())
+    except HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")
-        raise RuntimeError(f"BOTROL Cloud returned HTTP {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
+        raise RuntimeError(f"BOTROL Cloud HTTP {exc.code}: {detail}") from exc
+    except URLError as exc:
         raise RuntimeError(f"Cannot reach BOTROL Cloud: {exc.reason}") from exc
 
-
-def capture_and_transcribe():
-    print("\n🎙 Recording for 8 seconds. Speak now...")
-    try:
-        device = sd.default.device[0]
-        if device is None or int(device) < 0:
-            raise RuntimeError("No default microphone selected in Windows Sound settings.")
-        info = sd.query_devices(device, "input")
-        rate = int(info["default_samplerate"])
-        print(f"Microphone: {info['name']} | {rate} Hz")
-        audio = sd.rec(int(8 * rate), samplerate=rate, channels=1,
-                       dtype="float32", device=device, blocking=True)
-    except Exception as exc:
-        raise RuntimeError(f"Microphone recording failed: {exc}") from exc
-
-    mono = np.asarray(audio, dtype=np.float32).reshape(-1)
-    peak = float(np.max(np.abs(mono))) if mono.size else 0.0
-    rms = float(np.sqrt(np.mean(mono * mono))) if mono.size else 0.0
-    print(f"Captured audio level: peak={peak:.4f}, RMS={rms:.4f}")
-    if peak < 0.001:
-        raise RuntimeError("Captured silence. Check Windows microphone permissions, mute switch, and selected input device.")
-
-    count = int(round(len(mono) * TRANSCRIPTION_RATE / rate))
-    resampled = np.interp(np.linspace(0, len(mono)-1, count), np.arange(len(mono)), mono)
-    pcm = np.clip(resampled * 32767, -32768, 32767).astype("<i2").tobytes()
-    audio_data = sr.AudioData(pcm, TRANSCRIPTION_RATE, 2)
-    try:
-        transcript = sr.Recognizer().recognize_google(audio_data, language=LANGUAGE)
-    except sr.UnknownValueError as exc:
-        raise RuntimeError("Audio was recorded, but speech recognition could not understand it. Try a short clear phrase.") from exc
-    except sr.RequestError as exc:
-        raise RuntimeError(f"Google speech recognition failed: {exc}") from exc
-    print("You said:", transcript)
-    return transcript
-
-
-def run_task(token, transcript):
-    result = http_json("/api/v1/admin/tasks/execute", token,
-                       {"device_id": DEVICE_ID, "transcript": transcript})
-    task = result["task"]
-    print("\nTask:", task["summary"])
-    for index, step in enumerate(task["steps"], 1):
-        print(f"  {index}. {step['command']} [{step['status']}]")
-    print("\nWaiting for ESP32...")
-    deadline = time.time() + 90
-    while time.time() < deadline:
-        time.sleep(1.5)
-        status = http_json("/api/v1/admin/tasks/" + task["task_id"], token)
-        steps = status["steps"]
-        for index, step in enumerate(steps, 1):
-            print(f"  {index}. {step['command']}: {step['status']} {step.get('result', '')}")
-        if all(step["status"] in ("completed", "failed") for step in steps):
-            if any(step["status"] == "failed" for step in steps):
-                print("⚠ Task finished with an error.")
-            else:
-                print("✓ Task completed.")
-            return
-    print("Task is still pending. Check ESP32 power, Wi-Fi and Bluetooth pairing.")
-
-
 def main():
-    if sys.platform != "win32":
-        raise SystemExit("This first desktop hotkey agent is for Windows 10/11.")
     token = get_token()
-    print("Checking BOTROL Cloud...")
-    health = urllib.request.urlopen(API + "/health", timeout=20)
-    if health.status != 200:
-        raise RuntimeError("BOTROL Cloud health check failed.")
-    print("BOTROL Cloud connected.")
-    print("\nBOTROL is ready.")
-    print("Hotkey: Win + J")
-    print(f"Speech language: {LANGUAGE} (change BOTROL_SPEECH_LANGUAGE to ta-IN for Tamil)")
-    print("Press Win + J, speak after the prompt, then pause. Press Ctrl+C to exit.")
-    print("Note: speech audio is sent to Google's speech recognition service for transcription.")
+    with urlopen(API + "/health", timeout=20) as response:
+        if response.status != 200:
+            raise RuntimeError("BOTROL Cloud health check failed.")
 
-    busy = threading.Lock()
-
-    def activate():
-        if not busy.acquire(blocking=False):
-            print("\nBOTROL is busy with the previous task.")
-            return
-        def worker():
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path != "/":
+                self.send_error(404); return
+            body = PAGE.encode("utf-8")
+            self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+        def do_POST(self):
+            if self.path != "/task":
+                self.send_error(404); return
             try:
-                transcript = capture_and_transcribe()
-                run_task(token, transcript)
+                length = int(self.headers.get("Content-Length", "0"))
+                data = json.loads(self.rfile.read(length))
+                transcript = str(data.get("transcript", "")).strip()
+                if not transcript or len(transcript) > 2000:
+                    raise ValueError("Transcript must contain 1 to 2000 characters.")
+                result = submit_task(token, transcript)
+                payload = {"ok": True, "summary": result["task"]["summary"],
+                           "steps": result["task"]["steps"]}
+                status = 200
             except Exception as exc:
-                print("\n✗", exc)
-            finally:
-                busy.release()
-                print("\nReady. Press Win + J to speak.")
-        threading.Thread(target=worker, daemon=True).start()
+                payload = {"detail": str(exc)}; status = 400
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(status); self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+        def log_message(self, fmt, *args):
+            print("[BOTROL panel] " + fmt % args)
 
-    user32 = ctypes.windll.user32
-    if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_WIN | MOD_NOREPEAT, VK_J):
-        raise RuntimeError("Could not register Win + J. Another application may already use it.")
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    url = f"http://{HOST}:{PORT}/"
+    print("\nBOTROL is ready.")
+    print("Voice panel:", url)
+    print("Speech recognition: browser Web Speech API")
+    print("Language:", LANGUAGE, "(choose Tamil or English in the panel)")
+    print("Keep this window open. Close it to stop BOTROL.")
+    threading.Thread(target=lambda: webbrowser.open(url), daemon=True).start()
     try:
-        msg = wintypes.MSG()
-        while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
-            if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
-                activate()
-            user32.TranslateMessage(ctypes.byref(msg))
-            user32.DispatchMessageW(ctypes.byref(msg))
-    finally:
-        user32.UnregisterHotKey(None, HOTKEY_ID)
-
-
-if __name__ == "__main__":
-    try:
-        main()
+        server.serve_forever()
     except KeyboardInterrupt:
         print("\nBOTROL stopped.")
-    except Exception as error:
-        print("\nBOTROL could not start:", error)
-        input("Press Enter to close...")
+    finally:
+        server.server_close()
+
+if __name__ == "__main__":
+    main()
