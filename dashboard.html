@@ -62,7 +62,7 @@ async function send(command,button){
   show($("commandStatus"),"COMMAND QUEUED ✓\nTarget: "+DEVICE+"\nCommand: "+command+"\nWaiting for ESP32...");
   const started=Date.now();
   while(Date.now()-started<35000){
-   await wait(1500);
+   await wait(500);
    const sr=await fetch(API+"/api/v1/admin/commands/"+encodeURIComponent(id),{headers:{"Authorization":"Bearer "+token}});
    const sd=await sr.json().catch(()=>({}));
    if(!sr.ok)throw new Error(sd.detail||("Status check HTTP "+sr.status));
@@ -98,7 +98,7 @@ async function executeTask(){
   show($("taskStatus"),"TASK: "+task.summary+"\\n"+task.steps.map((s,i)=>(i+1)+". "+s.command+" · queued").join("\\n")+"\\n\\nWaiting for ESP32...");
   const start=Date.now();
   while(Date.now()-start<90000){
-   await wait(1500);
+   await wait(500);
    const sr=await fetch(API+"/api/v1/admin/tasks/"+encodeURIComponent(task.task_id),{headers:{"Authorization":"Bearer "+token}});
    const sd=await sr.json().catch(()=>({}));
    if(!sr.ok)throw new Error(sd.detail||"Could not read task status");
