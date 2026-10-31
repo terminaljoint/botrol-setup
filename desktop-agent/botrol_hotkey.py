@@ -1,6 +1,6 @@
 """BOTROL Windows voice hotkey agent.
 
-Hotkey: Win + Ctrl + Alt + V
+Hotkey: Win + J
 Speech transcription: Google Web Speech (no API key; internet required)
 Task planning/execution: BOTROL Cloud's built-in command parser.
 Admin token: Windows Credential Manager via keyring.
@@ -27,8 +27,8 @@ API = "https://botrol-cloud.onrender.com"
 DEVICE_ID = "BOTROL-ESP32-001"
 SERVICE_NAME = "BOTROL Desktop Agent"
 USERNAME = "admin-token"
-SAMPLE_RATE = 16000
-MAX_RECORD_SECONDS = 15
+TRANSCRIPTION_RATE = 16000
+MAX_RECORD_SECONDS = 20
 WAIT_FOR_SPEECH_SECONDS = 8
 SILENCE_SECONDS = 1.2
 BLOCK_SECONDS = 0.1
@@ -38,7 +38,7 @@ MOD_ALT = 0x0001
 MOD_CONTROL = 0x0002
 MOD_WIN = 0x0008
 MOD_NOREPEAT = 0x4000
-VK_V = 0x56
+VK_J = 0x4A
 WM_HOTKEY = 0x0312
 HOTKEY_ID = 1
 
@@ -75,8 +75,19 @@ def http_json(path, token, body=None):
 
 
 def capture_and_transcribe():
-    """Capture actual speech, stop after silence, and avoid a fixed-length empty clip."""
-    print("\n🎙 Speak now... (BOTROL stops after you finish)")
+    """Record from the Windows default microphone at its native sample rate."""
+    print("\\n🎙 Speak now... (BOTROL stops after you finish)")
+    device = sd.default.device[0]
+    if device is None or int(device) < 0:
+        raise RuntimeError("Windows has no default input microphone. Select one in Settings > System > Sound > Input.")
+
+    info = sd.query_devices(device, "input")
+    native_rate = int(info["default_samplerate"])
+    if int(info["max_input_channels"]) < 1:
+        raise RuntimeError("The selected default audio device has no microphone input.")
+
+    channels = 1
+    block_frames = max(256, int(native_rate * BLOCK_SECONDS))
     chunks = []
     started = False
     speech_elapsed = 0.0
@@ -84,50 +95,70 @@ def capture_and_transcribe():
     noise_samples = []
 
     try:
-        with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
-                            blocksize=int(SAMPLE_RATE * BLOCK_SECONDS)) as stream:
+        # Many Windows microphone drivers do not support 16 kHz capture directly.
+        # Capture at the device's native rate, then resample for Google recognition.
+        with sd.InputStream(device=device, samplerate=native_rate, channels=channels,
+                            dtype="float32", blocksize=block_frames) as stream:
             deadline = time.monotonic() + WAIT_FOR_SPEECH_SECONDS
             while time.monotonic() < deadline and not started:
-                block, overflowed = stream.read(int(SAMPLE_RATE * BLOCK_SECONDS))
-                level = float(np.sqrt(np.mean(block.astype(np.float32) ** 2))) / 32768.0
+                block, overflowed = stream.read(block_frames)
+                level = float(np.sqrt(np.mean(np.square(block))))
                 noise_samples.append(level)
-                baseline = float(np.median(noise_samples[-10:])) if noise_samples else 0.0
-                threshold = max(0.008, baseline * 3.0)
+                ambient = float(np.median(noise_samples[-12:]))
+                threshold = max(0.004, ambient * 2.5)
                 if level >= threshold:
                     started = True
                     chunks.append(block.copy())
-                    speech_elapsed += BLOCK_SECONDS
+                    speech_elapsed += len(block) / native_rate
+
             if not started:
-                raise RuntimeError("No speech detected. Check the selected Windows microphone and microphone permissions.")
+                raise RuntimeError(
+                    f"No speech detected from microphone '{info['name']}'. "
+                    "Check Windows Settings > Privacy & security > Microphone, "
+                    "and Settings > System > Sound > Input. BOTROL selected this default device."
+                )
 
             while speech_elapsed < MAX_RECORD_SECONDS:
-                block, overflowed = stream.read(int(SAMPLE_RATE * BLOCK_SECONDS))
+                block, overflowed = stream.read(block_frames)
                 chunks.append(block.copy())
-                speech_elapsed += BLOCK_SECONDS
-                level = float(np.sqrt(np.mean(block.astype(np.float32) ** 2))) / 32768.0
-                if level < 0.006:
-                    silence_elapsed += BLOCK_SECONDS
+                duration = len(block) / native_rate
+                speech_elapsed += duration
+                level = float(np.sqrt(np.mean(np.square(block))))
+                if level < max(0.0025, threshold * 0.55):
+                    silence_elapsed += duration
                 else:
                     silence_elapsed = 0.0
                 if silence_elapsed >= SILENCE_SECONDS and speech_elapsed >= 1.0:
                     break
     except sd.PortAudioError as exc:
-        raise RuntimeError(f"Microphone capture failed: {exc}. Check Windows microphone permissions and input device.") from exc
+        devices = sd.query_devices()
+        inputs = [f"{i}: {item['name']} ({item['default_samplerate']} Hz)"
+                  for i, item in enumerate(devices) if item["max_input_channels"] > 0]
+        raise RuntimeError(
+            f"Windows microphone capture failed: {exc}. "
+            f"Available input devices: {'; '.join(inputs) or 'none detected'}. "
+            "Choose a working default microphone in Windows Sound settings."
+        ) from exc
 
-    raw = np.concatenate(chunks, axis=0).reshape(-1).tobytes()
-    if len(raw) < SAMPLE_RATE * 2 // 2:
-        raise RuntimeError("The captured audio was too short. Please try again.")
+    captured = np.concatenate(chunks, axis=0).reshape(-1)
+    target_count = max(1, int(round(len(captured) * TRANSCRIPTION_RATE / native_rate)))
+    old_positions = np.arange(len(captured), dtype=np.float64)
+    new_positions = np.linspace(0, len(captured) - 1, target_count)
+    resampled = np.interp(new_positions, old_positions, captured)
+    pcm = np.clip(resampled * 32767.0, -32768, 32767).astype("<i2").tobytes()
+
+    if len(pcm) < TRANSCRIPTION_RATE:
+        raise RuntimeError("The captured audio was too short. Please speak a little longer.")
     recognizer = sr.Recognizer()
-    audio_data = sr.AudioData(raw, SAMPLE_RATE, 2)
+    audio_data = sr.AudioData(pcm, TRANSCRIPTION_RATE, 2)
     try:
         text = recognizer.recognize_google(audio_data, language=LANGUAGE)
     except sr.UnknownValueError as exc:
-        raise RuntimeError("Speech was captured, but recognition could not understand it. Try again closer to the microphone.") from exc
+        raise RuntimeError("Speech was captured, but recognition could not understand it. Try speaking closer to the microphone.") from exc
     except sr.RequestError as exc:
         raise RuntimeError(f"Speech recognition service unavailable: {exc}") from exc
     print("You said:", text)
     return text
-
 
 def run_task(token, transcript):
     result = http_json("/api/v1/admin/tasks/execute", token,
@@ -163,9 +194,9 @@ def main():
         raise RuntimeError("BOTROL Cloud health check failed.")
     print("BOTROL Cloud connected.")
     print("\nBOTROL is ready.")
-    print("Hotkey: Win + Ctrl + Alt + V")
+    print("Hotkey: Win + J")
     print(f"Speech language: {LANGUAGE} (change BOTROL_SPEECH_LANGUAGE to ta-IN for Tamil)")
-    print("Press the hotkey, speak after the prompt, then pause. Press Ctrl+C to exit.")
+    print("Press Win + J, speak after the prompt, then pause. Press Ctrl+C to exit.")
     print("Note: speech audio is sent to Google's speech recognition service for transcription.")
 
     busy = threading.Lock()
@@ -182,12 +213,12 @@ def main():
                 print("\n✗", exc)
             finally:
                 busy.release()
-                print("\nReady. Press Win + Ctrl + Alt + V to speak.")
+                print("\nReady. Press Win + J to speak.")
         threading.Thread(target=worker, daemon=True).start()
 
     user32 = ctypes.windll.user32
-    if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_WIN | MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_V):
-        raise RuntimeError("Could not register Win + Ctrl + Alt + V. Another application may already use it.")
+    if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_WIN | MOD_NOREPEAT, VK_J):
+        raise RuntimeError("Could not register Win + J. Another application may already use it.")
     try:
         msg = wintypes.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
