@@ -167,7 +167,7 @@ function renderNetworks(){
   for(const network of scannedNetworks){
     const row=document.createElement("div");row.className="network";
     const label=document.createElement("span");
-    label.textContent=network.ssid+" · "+network.rssi+" dBm · Ch "+network.channel+" · "+(network.encryption===7?"Open":"Secured");
+    label.textContent=network.ssid+" · "+network.rssi+" dBm · Ch "+network.channel+" · "+(network.encryption===0?"Open":"Secured");
     const choose=document.createElement("button");choose.type="button";choose.textContent="Select";
     choose.addEventListener("click",()=>{$("ssid").value=network.ssid;$("password").focus();});
     row.append(label,choose);host.append(row);
